@@ -13,6 +13,7 @@ Target Software:
 
 Host Software:
 * ROS Bringup Files
+* Mapping, Laser Scan, Navigation, ...
 
 Goals:
 * Small Autonomous Robot controlled by ROS from external PC
