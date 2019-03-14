@@ -2,9 +2,9 @@
 Small robot based on ESP32 + ROS + ZUMO 32u4 base
 
 Components:
-* ZUMO32U4 Base
+* ZUMO32U4 Base (I2C Slave, Bat ADC, Motor Encoder, PWM for Lidar Stepper, l3gd20h, lsm303d)
 * ESP32 with PSRAM
-* vl53l1x TOF sensor
+* STM vl53l1x TOF sensor
 * Rotating Lidar with PCF8475+ULN2003 Stepper motor
 * BNO055 Sensor
 
