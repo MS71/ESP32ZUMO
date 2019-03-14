@@ -1,6 +1,8 @@
 # ESP32ZUMO
 Small robot based on ESP32 + ROS + ZUMO 32u4 base
 
+![alt text](doc/scanning_zumo.jpg)
+
 Components:
 * ZUMO32U4 Base (I2C Slave, Bat ADC, Motor Encoder, PWM for Lidar Stepper, l3gd20h, lsm303d, Line Sonsor, ...)
 * ESP32 with PSRAM
