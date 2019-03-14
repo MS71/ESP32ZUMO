@@ -13,3 +13,7 @@ Target Software:
 
 Host Software:
 * ROS Bringup Files
+
+Goals:
+* Small Autonomous Robot controlled by ROS from external PC
+* Small Autonomous Robot controlled by ROS running on ESP32
