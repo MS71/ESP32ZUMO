@@ -1,0 +1,20 @@
+<launch>
+  <arg name="port" default="11411" />
+  <arg name="addr" default="192.168.1.72" />
+
+  <node pkg="rosserial_server" type="udp_socket_node" name="rosserial_server">
+    <param name="client_port" value="$(arg port)" />
+    <param name="client_addr" value="$(arg addr)" />
+  </node>
+  <node pkg="rosserial_python" type="message_info_service.py" name="rosserial_message_info" />
+
+  <rosparam param="/BNO055Callibration">[0,0,0,-228,-1327,516,2,-3,-1,1000,992]</rosparam>
+
+  <node pkg="joy" type="joy_node" name="joy_node" />
+
+  <arg name="teleop_config" default="$(find roszumo)/config/joy_teleop.yaml" />
+  <rosparam file="$(arg teleop_config)" command="load" />
+  <node pkg="joy_teleop" type="joy_teleop.py" name="joy_teleop">
+  </node>
+
+</launch>

@@ -1,0 +1,138 @@
+<?xml version="1.0"?>
+<robot name="zumoros">
+
+  <material name="grey">
+    <color rgba="0 0 1 0.5"/>
+  </material>
+
+  <material name="blue">
+    <color rgba="0 0 0.8 0.5"/>
+  </material>
+
+  <material name="red">
+    <color rgba="0.8 0 0 0.5"/>
+  </material>
+
+  <link name="base_link">
+  <!-- BOX -->
+    <visual>
+		<origin xyz="0 0 0.01" rpy="0 0 0"/>
+      <material name="grey"/>
+      <geometry>
+        <box size="0.10 0.08 0.035"/>
+      </geometry>
+    </visual>
+
+   <!-- LEFT WHEEL -->
+	<visual>
+		<origin xyz="0.0 0.04 0" rpy="0 0 0"/>
+      <material name="blue"/>
+		<geometry>
+          <box size="0.09 0.01 0.04"/>
+		</geometry>
+   </visual>
+	<visual>
+		<origin xyz="0.04 0.04 0" rpy="1.57 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <cylinder length="0.01" radius="0.02"/>
+	  </geometry>
+   </visual>
+	<visual>
+		<origin xyz="-0.04 0.04 0" rpy="1.57 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <cylinder length="0.01" radius="0.02"/>
+	  </geometry>
+  </visual>
+   <!-- RIGHT WHEEL -->
+	<visual>
+		<origin xyz="0.0 -0.04 0" rpy="0 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <box size="0.09 0.01 0.04"/>
+	  </geometry>
+   </visual>
+	<visual>
+		<origin xyz="0.04 -0.04 0" rpy="1.57 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <cylinder length="0.01" radius="0.02"/>
+	  </geometry>
+   </visual>
+	<visual>
+		<origin xyz="-0.04 -0.04 0" rpy="1.57 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <cylinder length="0.01" radius="0.02"/>
+	  </geometry>
+  </visual>
+
+   <!-- TOWER -->
+	<visual>
+		<origin xyz="0.02 0 0.03" rpy="0 0 0"/>
+      <material name="blue"/>
+	  <geometry>
+       <cylinder length="0.07" radius="0.01"/>
+	  </geometry>
+   </visual>
+  </link>
+
+  <!-- US-08 -->
+  <!--link name="sonar_link">
+	<visual>
+		<origin xyz="0 0.01 0" rpy="0 1.57 0"/>
+      <material name="red"/>
+	  <geometry>
+       <cylinder length="0.02" radius="0.01"/>
+	  </geometry>
+   </visual>
+	<visual>
+		<origin xyz="0 -0.01 0" rpy="0 1.57 0"/>
+      <material name="red"/>
+	  <geometry>
+       <cylinder length="0.02" radius="0.01"/>
+	  </geometry>
+   </visual>
+ </link>
+
+  <joint name="base_to_sonar" type="fixed">
+    <parent link="base_link"/>
+    <child link="sonar_link"/>
+    <origin xyz="0.08 0 0.04"/>
+  </joint-->
+
+  <!--link name="camera_link">
+	<visual>
+    <origin xyz="0.0 0 0.0" rpy="0 0 0"/>
+      <material name="black"/>
+		<geometry>
+          <box size="0.04 0.04 0.04"/>
+		</geometry>
+   </visual>
+  </link>
+
+  <joint name="base_to_camera" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.02 0.0 0.08"/>
+  </joint-->
+
+  <link name="imu_link">
+   <!-- IMU -->
+	<visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="black"/>
+		<geometry>
+          <box size="0.01 0.01 0.01"/>
+		</geometry>
+   </visual>
+  </link>
+
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.02 -0.02 0.04"/>
+  </joint>
+
+</robot>
