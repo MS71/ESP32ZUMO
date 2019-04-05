@@ -10,7 +10,8 @@
  */
 #define CMD_LIDAR_SET_PWM       0x05
 
-#define NUM_LIDAR_SCANS 34
+#define NUM_LIDAR_SCANS   35
+#define CFG_LIDAR_OFFSET  -3
 
 typedef struct
 {

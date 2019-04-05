@@ -38,6 +38,11 @@ static int show_socket_error_reason(const char *str, int socket)
     return err;
 }
 
+int ota_log(const char *format, va_list args)
+{
+  return 0;
+}
+
 static esp_err_t create_tcp_server()
 {
     ESP_LOGI(TAG, "server socket....port=%d", OTA_LISTEN_PORT);
@@ -90,7 +95,7 @@ void ota_server_start()
     int content_length = -1;
     int content_received = 0;
 
-    esp_ota_handle_t ota_handle; 
+    esp_ota_handle_t ota_handle;
     do {
         recv_len = recv(connect_socket, ota_buff, OTA_BUFF_SIZE, 0);
         if (recv_len > 0) {
@@ -134,5 +139,6 @@ void ota_server_start()
     ESP_LOGI(TAG, "Next boot partition subtype %d at offset 0x%x",
     	boot_partition->subtype, boot_partition->address);
     ESP_LOGI(TAG, "Prepare to restart system!");
+    esp_log_set_vprintf(ota_log);
     esp_restart();
 }

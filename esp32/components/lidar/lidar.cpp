@@ -25,7 +25,7 @@ lidar::lidar(int _I2CPortNumber)
   I2CPortNumber = _I2CPortNumber;
   lidar_motor_steps = 0;
   lidar_motor_dir = 1;
-  lidar_motor_phase_offset = -2;
+  lidar_motor_phase_offset = CFG_LIDAR_OFFSET;
   last_range_mm = 0;
   min_range_mm = 0xffff;
   mean_min_range_mm = 0xffff;
@@ -48,8 +48,8 @@ void lidar::start()
     // inter-measurement period). This period should be at least as long as the
     // timing budget.
   	sensor.setDistanceMode(VL53L1X::Medium);
-  	sensor.setMeasurementTimingBudget(20000);
-  	sensor.startContinuous(33);
+  	sensor.setMeasurementTimingBudget(30000);
+  	sensor.startContinuous(30);
 
     {
       i2c_cmd_handle_t CommandHandle = NULL;

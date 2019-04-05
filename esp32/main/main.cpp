@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 static const char * TAG = "MAIN";
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
@@ -19,6 +21,8 @@ static const char * TAG = "MAIN";
 #define ENABLE_IMU_BNO055
 #undef USE_RAWIMU
 #undef ENABLE_RTIMULIB
+#undef ENABLE_TCPLOG
+#define ENABLE_WATCHDOG
 
 #define CMD_BEEP                0x01
 #define CMD_BATLEVEL            0x02
@@ -34,6 +38,9 @@ static const char * TAG = "MAIN";
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_event_loop.h"
+#include "esp_task_wdt.h"
+#include "lwip/apps/sntp.h"
+#include "esp_int_wdt.h"
 
 #include "ssd1306.h"
 #include "ssd1306_draw.h"
@@ -164,6 +171,27 @@ extern "C" {
 	void app_main(void);
 }
 
+void vBeep(int frequency, int duration, int volume)
+{
+	i2c_cmd_handle_t CommandHandle = NULL;
+	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
+	{
+		i2c_master_start( CommandHandle );
+		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
+		i2c_master_write_byte( CommandHandle, CMD_BEEP, true);
+		i2c_master_write_byte( CommandHandle, ((frequency)>>8)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((frequency)>>0)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((duration)>>8)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((duration)>>0)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((volume)>>0)&0xff, true);
+		i2c_master_stop( CommandHandle );
+		if( ESP_OK  == i2c_master_cmd_begin((i2c_port_t)I2CPortNumber, CommandHandle, pdMS_TO_TICKS( 10 )) )
+		{
+		}
+		i2c_cmd_link_delete( CommandHandle );
+	}
+}
+
 static const int I2CDisplayAddress = 0x3C;
 static const int I2CDisplayWidth = 128;
 static const int I2CDisplayHeight = 64;
@@ -253,11 +281,15 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 	static double th = 0;
 
 	/*
-	 * 230 pulse auf 0.95m
+	 * Pololu Wheel Encoder
 	 */
-	//double DistancePerCount = 50.0/12.0 * 0.6/17.0;
-	double DistancePerCount = 0.0001;
-	double lengthBetweenTwoWheels = 0.09;
+	double gear = 100.0/1.0;
+	double steps_per_revolution = 12.0;
+	double wheel_diameter = 0.038; // 38mm
+	double lengthBetweenTwoWheels = 0.085;
+	double pi = 3.14159265359;
+	//double DistancePerCount = 0.0001;
+	double DistancePerCount = (pi*wheel_diameter) / (steps_per_revolution*gear);
 
 	//extract the wheel velocities from the tick signals count
 	double deltaLeft = enc_l;
@@ -408,6 +440,40 @@ bool nReadM32U4Status()
 	return res;
 }
 
+int motor_r = 0;
+int motor_l = 0;
+void cmd_vel_motor_update()
+{
+	i2c_cmd_handle_t CommandHandle = NULL;
+	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
+	{
+		int16_t l = motor_l;
+		int16_t r = motor_r;
+		i2c_master_start( CommandHandle );
+		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
+		i2c_master_write_byte( CommandHandle, CMD_MOTORS_SET_SPEED, true);
+		i2c_master_write_byte( CommandHandle, ((l)>>8)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((l)>>0)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((r)>>8)&0xff, true);
+		i2c_master_write_byte( CommandHandle, ((r)>>0)&0xff, true);
+		i2c_master_stop( CommandHandle );
+		if( ESP_OK  == i2c_master_cmd_begin((i2c_port_t)I2CPortNumber, CommandHandle, pdMS_TO_TICKS( 10 )) )
+		{
+		}
+		i2c_cmd_link_delete( CommandHandle );
+	}
+}
+
+void cmd_vel_motor_stop()
+{
+	if( motor_l!=0 || motor_r!=0 )
+	{
+		motor_r = 0;
+		motor_l = 0;
+		cmd_vel_motor_update();
+	}
+}
+
 #ifdef USE_RAWIMU
 l3gd20h_sensor_t* l3gd20h;
 l3gd20h_float_data_t  data;
@@ -499,7 +565,8 @@ void I2CThread(void *pvParameters)
 						- setPwrModeLowPower();
 						- setPwrModeSuspend(); (while suspended bno055 must remain in CONFIG_MODE)
 						*/
-			bno055->setOprModeNdof();
+			//bno055->setOprModeNdof();
+			bno055->setOprModeConfig();
 		} catch ( BNO055BaseException ex ) {
 			ESP_LOGI(TAG, "I2CThread() BNO055 exception %s",ex.what());
 		}
@@ -514,7 +581,7 @@ void I2CThread(void *pvParameters)
 	rtimu_settings->m_I2CBus = (i2c_port_t)I2CPortNumber;
 	rtimu_settings->m_SPIBus = 0;
 	rtimu_settings->m_SPISelect = 0;
-	rtimu_settings->m_SPISpeed = 500000;
+	rtimu_settings->m_SPISpeed = 400000;
 	rtimu_settings->m_fusionType = RTFUSION_TYPE_RTQF;
 	rtimu_settings->m_axisRotation = RTIMU_XNORTH_YEAST;
 	rtimu_settings->m_pressureType = RTPRESSURE_TYPE_AUTODISCOVER;
@@ -687,6 +754,24 @@ void I2CThread(void *pvParameters)
 
 	while(1)
 	{
+		{
+			static bool _connected = false;
+			if( _connected != nh.connected() )
+			{
+				_connected = nh.connected();
+				ESP_LOGI(TAG, "I2CThread loop ros(%d,%d,%d)",
+					nh.connected(),published,nh.getHardware()->ok());
+			}
+		}
+
+#ifdef ENABLE_WATCHDOG
+		esp_task_wdt_feed();
+#endif
+		if( !nh.connected() )
+		{
+			cmd_vel_motor_stop();
+		}
+
 		if( nh.connected() && published==false )
 		{
 			published = true;
@@ -755,7 +840,7 @@ void I2CThread(void *pvParameters)
 				{
 					ESP_LOGI(TAG, "BNO055 try get BNO055Callibration param ...");
 
-					bno055->setOprModeConfig();
+					//bno055->setOprModeConfig();
 					int p[3+3+3+2] = {0,0,0,-192,-1357,-263,2,-3,-1,1000,569};
 					nh.getParam("/BNO055Callibration", p, 11, 100);
 
@@ -1068,33 +1153,25 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 		y = y/k;
 	}
 
-	int motor_r = (int)(200.0*x)+(200.0*(y));
-	int motor_l = (int)(200.0*x)-(200.0*(y));
+	motor_r = (int)(200.0*x)+(200.0*(y));
+	motor_l = (int)(200.0*x)-(200.0*(y));
 
 	ESP_LOGI(TAG, "cmd_vel_callback %d,%d",
 		motor_l,
 		motor_r);
 
-	{
-		i2c_cmd_handle_t CommandHandle = NULL;
-		if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
-		{
-			int16_t l = motor_l;
-			int16_t r = motor_r;
-			i2c_master_start( CommandHandle );
-			i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
-			i2c_master_write_byte( CommandHandle, CMD_MOTORS_SET_SPEED, true);
-			i2c_master_write_byte( CommandHandle, ((l)>>8)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((l)>>0)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((r)>>8)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((r)>>0)&0xff, true);
-			i2c_master_stop( CommandHandle );
-			if( ESP_OK  == i2c_master_cmd_begin((i2c_port_t)I2CPortNumber, CommandHandle, pdMS_TO_TICKS( 10 )) )
-			{
-			}
-			i2c_cmd_link_delete( CommandHandle );
-		}
-	}
+	cmd_vel_motor_update();
+}
+
+int my_nulllog(const char *format, va_list args);
+int my_tcplog(const char *format, va_list args);
+
+static void initialize_sntp(void)
+{
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
 }
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
@@ -1109,21 +1186,28 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
 
 		case SYSTEM_EVENT_STA_GOT_IP:
 		ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP");
+#ifdef ENABLE_TCPLOG
+		esp_log_set_vprintf(my_tcplog);
+#endif
 		wificonnected = true;
 		xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
 		sprintf(wifistate,"%03d",(event->event_info.got_ip.ip_info.ip.addr>>24)&0xff);
+		initialize_sntp();
 		break;
 
 		case SYSTEM_EVENT_STA_LOST_IP:
+#ifdef ENABLE_TCPLOG
+		esp_log_set_vprintf(my_nulllog);
+#endif
 		ESP_LOGI(TAG, "SYSTEM_EVENT_STA_LOST_IP");
 		break;
 
 		case SYSTEM_EVENT_STA_DISCONNECTED:
 		ESP_LOGI(TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
+		xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+		sprintf(wifistate,"???");
 		wificonnected = false;
 		esp_wifi_connect();
-		sprintf(wifistate,"???");
-		xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
 		break;
 
 		case SYSTEM_EVENT_SCAN_DONE:
@@ -1150,10 +1234,11 @@ static void initialise_wifi()
         .sta = {
 						{.ssid = WIFI_SSID},
 		        {.password = WIFI_PASSWORD},
-						/*.sort_method = WIFI_CONNECT_AP_BY_SIGNAL,*/
-						.scan_method = WIFI_ALL_CHANNEL_SCAN,
         },
     };
+		wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+		wifi_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+
     ESP_LOGI(TAG, "Setting WiFi configuration SSID %s...", wifi_config.sta.ssid);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
@@ -1211,10 +1296,71 @@ void vResetBNO055()
 	vTaskDelay(750 / portTICK_PERIOD_MS);
 }
 
+#ifdef ENABLE_TCPLOG
+int my_nulllog(const char *format, va_list args)
+{
+	return 0;
+}
+
+int my_tcplog(const char *format, va_list args)
+{
+	static int sock = -1;
+	if( sock == -1 )
+	{
+		sock =  socket(AF_INET, SOCK_STREAM, 0);
+		if( sock != -1 )
+		{
+			struct sockaddr_in destAddr;
+			struct addrinfo* result;
+
+			//long on = 0;
+			//ioctl(sock, (int)FIONBIO, (char *)&on);
+
+	    /* resolve the domain name into a list of addresses */
+	    int error = getaddrinfo(rosCoreHostName, NULL, NULL, &result);
+	    if(error != 0 || result == NULL)
+	    {
+				close(sock);
+				sock = -1;
+	      return 0;
+	    }
+	    destAddr.sin_addr = ((struct sockaddr_in *)result->ai_addr)->sin_addr;
+			//destAddr.sin_addr.s_addr = inet_addr("192.168.1.45");
+			destAddr.sin_family = AF_INET;
+			destAddr.sin_port = htons(20001);
+			int err = connect(sock, (struct sockaddr *)&destAddr, sizeof(destAddr));
+			if (err != 0) {
+				close(sock);
+				sock = -1;
+				return 0;
+			}
+		}
+	}
+	if( sock != -1 )
+	{
+			char line[256];
+			vsnprintf (line, sizeof(line), format, args);
+			int n = strlen(line);
+			int err = send(sock, line, n, 1);
+			if (err != 0) {
+				close(sock);
+				sock = -1;
+			}
+			return n;
+	}
+	return 0;
+}
+#endif
+
 void app_main(void)
 {
 	ESP_ERROR_CHECK( nvs_flash_init() );
 	ESP_LOGI(TAG, "main() ...");
+
+#ifdef ENABLE_WATCHDOG
+	esp_int_wdt_init();
+	esp_task_wdt_init(1000,true);
+#endif
 
 #ifdef ENABLE_I2C
 	ESP_LOGI(TAG, "main() i2c init ...");
@@ -1234,28 +1380,7 @@ void app_main(void)
 	vResetBNO055();
 #endif
 
-	{
-		i2c_cmd_handle_t CommandHandle = NULL;
-		if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
-		{
-			uint16_t frequency = 1000;
-			uint16_t duration = 200;
-			uint8_t volume = 20;
-			i2c_master_start( CommandHandle );
-			i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
-			i2c_master_write_byte( CommandHandle, CMD_BEEP, true);
-			i2c_master_write_byte( CommandHandle, ((frequency)>>8)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((frequency)>>0)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((duration)>>8)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((duration)>>0)&0xff, true);
-			i2c_master_write_byte( CommandHandle, ((volume)>>0)&0xff, true);
-			i2c_master_stop( CommandHandle );
-			if( ESP_OK  == i2c_master_cmd_begin((i2c_port_t)I2CPortNumber, CommandHandle, pdMS_TO_TICKS( 10 )) )
-			{
-			}
-			i2c_cmd_link_delete( CommandHandle );
-		}
-	}
+	vBeep(1000,100,20);
 
 	{
 		i2c_cmd_handle_t CommandHandle = NULL;
