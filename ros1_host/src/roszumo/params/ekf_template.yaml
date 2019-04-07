@@ -80,10 +80,15 @@ odom0: /odom_raw
 # has no pose information, so the first six values would be meaningless in that case. Each vector defaults to all false
 # if unspecified, effectively making this parameter required for each sensor.
 odom0_config: [false, false, false,
-               false, false, true,
+               false, false, false,
                true, true, false,
                false, false, true,
                false, false, false]
+#odom0_config: [false, false, false,
+#               false, false, false,
+#               false, false, false,
+#               false, false, false,
+#               false, false, false]
 
 # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
 # the size of the subscription queue so that more measurements are fused.
@@ -108,7 +113,7 @@ odom0_differential: true
 # for all future measurements. While you can achieve the same effect with the differential paremeter, the key
 # difference is that the relative parameter doesn't cause the measurement to be converted to a velocity before
 # integrating it. If you simply want your measurements to start at 0 for a given sensor, set this to true.
-odom0_relative: false
+odom0_relative: true
 
 # [ADVANCED] If your data is subject to outliers, use these threshold settings, expressed as Mahalanobis distances, to
 # control how far away from the current vehicle state a sensor measurement is permitted to be. Each defaults to
@@ -143,17 +148,17 @@ odom0_twist_rejection_threshold: 1
 
 imu0: /imu_data
 imu0_config: [false, false, false,
-              false, false,  true,
-              false, false, false,
-              false, false,  true,
-              false,  false, false]
+              false, false, true,
+              true, false, false,
+              false, false, true,
+              true, false, false]
 imu0_nodelay: false
 imu0_differential: false
 imu0_relative: false
 imu0_queue_size: 20
-imu0_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
-imu0_twist_rejection_threshold: 0.8                #
-imu0_linear_acceleration_rejection_threshold: 0.8  #
+imu0_pose_rejection_threshold: 0.01                  # Note the difference in parameter names
+imu0_twist_rejection_threshold: 0.01                 #
+imu0_linear_acceleration_rejection_threshold: 0.005 #
 
 # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
 # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
@@ -171,12 +176,12 @@ imu0_remove_gravitational_acceleration: true
 # predicition. Note that if an acceleration measurement for the variable in question is available from one of the
 # inputs, the control term will be ignored.
 # Whether or not we use the control input during predicition. Defaults to false.
-#use_control: true
+use_control: false
 # Whether the input (assumed to be cmd_vel) is a geometry_msgs/Twist or geometry_msgs/TwistStamped message. Defaults to
 # false.
-#stamped_control: false
+stamped_control: false
 # The last issued control command will be used in prediction for this period. Defaults to 0.2.
-#control_timeout: 0.2
+control_timeout: 0.2
 # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.
 control_config: [true, false, false, false, false, true]
 # Places limits on how large the acceleration term will be. Should match your robot's kinematics.

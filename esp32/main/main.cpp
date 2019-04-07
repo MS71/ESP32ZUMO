@@ -286,7 +286,7 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 	double gear = 100.0/1.0;
 	double steps_per_revolution = 12.0;
 	double wheel_diameter = 0.038; // 38mm
-	double lengthBetweenTwoWheels = 0.085;
+	double lengthBetweenTwoWheels = 0.09; // 9cm
 	double pi = 3.14159265359;
 	//double DistancePerCount = 0.0001;
 	double DistancePerCount = (pi*wheel_diameter) / (steps_per_revolution*gear);
@@ -338,6 +338,7 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 
 	//Odometry message
 	odom_msg.header.stamp = nh.now();
+	odom_msg.header.seq = odom_msg.header.seq + 1;
 	odom_msg.header.frame_id = "odom";
 
 	//set the position
@@ -556,17 +557,31 @@ void I2CThread(void *pvParameters)
 	{
 		try {
 			bno055_configured = false;
+			ESP_LOGI(TAG, "I2CThread() BNO055 init ...");
 			bno055->begin();  // BNO055 is in CONFIG_MODE until it is changed
+			bno055->setOprModeConfig();
 			bno055->enableExternalCrystal();
 			//bno.setSensorOffsets(storedOffsets);
-			bno055->setAxisRemap(BNO055_REMAP_CONFIG_P5, BNO055_REMAP_SIGN_P0); // see datasheet, section 3.4
+			bno055->setAxisRemap(BNO055_REMAP_CONFIG_P2, BNO055_REMAP_SIGN_P2); // see datasheet, section 3.4
+
+			bno055->setUnits(BNO055_UNIT_ACCEL_MS2,
+										BNO055_UNIT_ANGULAR_RATE_RPS,
+										BNO055_UNIT_EULER_DEGREES,
+										BNO055_UNIT_TEMP_C,
+										BNO055_DATA_FORMAT_ANDROID);
+
+			#if 0
+			bno055->setAccelConfig(BNO055_CONF_ACCEL_RANGE_4G,
+														 BNO055_CONF_ACCEL_BANDWIDTH_7_81HZ,
+ 													 	 BNO055_CONF_ACCEL_MODE_NORMAL);
+			#endif
 			/* you can specify a PoWeRMode using:
 						- setPwrModeNormal(); (Default on startup)
 						- setPwrModeLowPower();
 						- setPwrModeSuspend(); (while suspended bno055 must remain in CONFIG_MODE)
 						*/
 			//bno055->setOprModeNdof();
-			bno055->setOprModeConfig();
+			ESP_LOGI(TAG, "I2CThread() BNO055 init done");
 		} catch ( BNO055BaseException ex ) {
 			ESP_LOGI(TAG, "I2CThread() BNO055 exception %s",ex.what());
 		}
@@ -836,13 +851,13 @@ void I2CThread(void *pvParameters)
 		if( bno055 != NULL )
 		{
 			try {
-				if( nh.connected() && published==true && bno055_configured==false )
+				if( /*nh.connected() && published==true &&*/ bno055_configured==false )
 				{
 					ESP_LOGI(TAG, "BNO055 try get BNO055Callibration param ...");
 
 					//bno055->setOprModeConfig();
-					int p[3+3+3+2] = {0,0,0,-192,-1357,-263,2,-3,-1,1000,569};
-					nh.getParam("/BNO055Callibration", p, 11, 100);
+					int p[3+3+3+2] = {8,7,1,-56,-486,552,2,-3,-1,1000,936};
+					//nh.getParam("/BNO055Callibration", p, 11, 100);
 
 					bno055_offsets_t o;
 					o.accelOffsetX = p[0];
@@ -870,13 +885,10 @@ void I2CThread(void *pvParameters)
 					bno055_configured = true;
 				}
 
-				if( nh.connected() && published==true && bno055_configured==true )
+				if( bno055_configured==true )
 				{
-					bno055_quaternion_t quaternion = bno055->getQuaternion();
-					bno055_vector_t vector_angvel = bno055->getVectorGyroscope();
-					bno055_vector_t vector_linaccl = bno055->getVectorLinearAccel();
-					int8_t temperature = bno055->getTemp();
 					bno055_calibration_t calib = bno055->getCalibration();
+
 					if( memcmp(&bno055_calib,&calib,sizeof(bno055_calibration_t)) != 0 )
 					{
 						bno055->setOprModeConfig();
@@ -892,44 +904,90 @@ void I2CThread(void *pvParameters)
 							bno055_offsets.accelRadius,bno055_offsets.magRadius);
 					}
 
-					imu_msg.header.frame_id = "imu_link";
-					imu_msg.header.stamp = nh.now();
-					imu_msg.orientation.x = quaternion.x;
-					imu_msg.orientation.y = quaternion.y;
-					imu_msg.orientation.z = quaternion.z;
-					imu_msg.orientation.w = quaternion.w;
-					const double orientation_covariance[9] = {
+#if 0
+					{
+						bno055_vector_t euler = bno055->getVectorEuler();
+						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
+							euler.x,euler.y,euler.z);
+					}
+#endif
+
+#if 0
+					{
+						bno055_quaternion_t quaternion = bno055->getQuaternion();
+						ESP_LOGI(TAG, "I2CThread() BNO055 quaternion x=%f, y=%f, z=%f, w=%f",
+							quaternion.x,quaternion.y,quaternion.z,quaternion.w);
+					}
+#endif
+
+				}
+				if( nh.connected() && published==true && bno055_configured==true )
+				{
+					static ros::Time _prev;
+					ros::Time now = nh.now();
+					if( now.toSec() > (_prev.toSec() + 0.1) )
+					{
+						_prev = now;
+						bno055_quaternion_t quaternion = bno055->getQuaternion();
+						bno055_vector_t vector_angvel = bno055->getVectorGyroscope();
+						bno055_vector_t vector_linaccl = bno055->getVectorLinearAccel();
+						int8_t temperature = bno055->getTemp();
+
+						bno055_vector_t euler = bno055->getVectorEuler();
+						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
+							euler.x,euler.y,euler.z);
+
+						imu_msg.header.frame_id = "imu_link";
+						imu_msg.header.stamp = now;
+						imu_msg.header.seq = imu_msg.header.seq+1;
+						imu_msg.orientation.x = quaternion.x;
+						imu_msg.orientation.y = quaternion.y;
+						imu_msg.orientation.z = quaternion.z;
+						imu_msg.orientation.w = quaternion.w;
+#if 1
+						imu_msg.orientation_covariance[0] = -1.0;
+#else
+						const double orientation_covariance[9] = {
+								1.0, 0.0, 0.0,
+								0.0, 1.0,	0.0,
+								0.0, 0.0,	1.0 };
+						memcpy(imu_msg.orientation_covariance,
+							orientation_covariance,
+							sizeof(imu_msg.orientation_covariance));
+#endif
+
+						imu_msg.angular_velocity.x = vector_angvel.x/* * M_PI / 180.0*/;
+						imu_msg.angular_velocity.y = vector_angvel.y/* * M_PI / 180.0*/;
+						imu_msg.angular_velocity.z = vector_angvel.z/* * M_PI / 180.0*/;
+#if 0
+						imu_msg.angular_velocity_covariance[0] = -1.0;
+#else
+						const double angular_velocity_covariance[9] = {
 							1.0, 0.0, 0.0,
 							0.0, 1.0,	0.0,
 							0.0, 0.0,	1.0 };
-					memcpy(imu_msg.orientation_covariance,
-						orientation_covariance,
-						sizeof(imu_msg.orientation_covariance));
+						memcpy(imu_msg.angular_velocity_covariance,
+							angular_velocity_covariance,
+							sizeof(imu_msg.angular_velocity_covariance));
+#endif
 
-					const double G_TO_MPSS = 9.80665;
-					imu_msg.angular_velocity.x = vector_angvel.x * G_TO_MPSS;
-					imu_msg.angular_velocity.y = vector_angvel.y * G_TO_MPSS;
-					imu_msg.angular_velocity.z = vector_angvel.z * G_TO_MPSS;
-					const double angular_velocity_covariance[9] = {
-						1.0, 0.0, 0.0,
-						0.0, 1.0,	0.0,
-						0.0, 0.0,	1.0 };
-					memcpy(imu_msg.angular_velocity_covariance,
-						angular_velocity_covariance,
-						sizeof(imu_msg.angular_velocity_covariance));
+						imu_msg.linear_acceleration.x = vector_linaccl.x/* / 100.0*/;
+						imu_msg.linear_acceleration.y =vector_linaccl.y/* / 100.0*/;
+						imu_msg.linear_acceleration.z = vector_linaccl.z/* / 100.0*/;
+#if 1
+						imu_msg.linear_acceleration_covariance[0] = -1.0;
+#else
+						const double linear_acceleration_covariance[9] = {
+							1.0, 0.0, 0.0,
+							0.0, 1.0,	0.0,
+							0.0, 0.0,	1.0 };
+						memcpy(imu_msg.linear_acceleration_covariance,
+							linear_acceleration_covariance,
+							sizeof(imu_msg.linear_acceleration_covariance));
+#endif
 
-					imu_msg.linear_acceleration.x = vector_linaccl.x;
-					imu_msg.linear_acceleration.y =vector_linaccl.y;
-					imu_msg.linear_acceleration.z = vector_linaccl.z;
-					const double linear_acceleration_covariance[9] = {
-						1.0, 0.0, 0.0,
-						0.0, 1.0,	0.0,
-						0.0, 0.0,	1.0 };
-					memcpy(imu_msg.linear_acceleration_covariance,
-						linear_acceleration_covariance,
-						sizeof(imu_msg.linear_acceleration_covariance));
-
-					pub_imu.publish(&imu_msg);
+						pub_imu.publish(&imu_msg);
+					}
 				}
 			} catch ( BNO055BaseException ex ) {
 				ESP_LOGI(TAG, "I2CThread() BNO055 exception %s",ex.what());
@@ -956,6 +1014,7 @@ void I2CThread(void *pvParameters)
 
 					imu_msg.header.frame_id = "imu_link";
 					imu_msg.header.stamp = nh.now();
+					imu_msg.header.seq = imu_msg.header.seq + 1;
 					imu_msg.orientation.x = rtimu_data.fusionQPose.x();
 					imu_msg.orientation.y = rtimu_data.fusionQPose.y();
 					imu_msg.orientation.z = rtimu_data.fusionQPose.z();
@@ -1061,6 +1120,7 @@ void I2CThread(void *pvParameters)
 						if( scan.dir == -1 )
 						{
 							scan_msg.header.stamp = time;
+							scan_msg.header.seq = scan_msg.header.seq + 1;
 							scan_msg.angle_min = (2.0*3.14 * lidar_angle_min/360.0);
 							scan_msg.angle_max = (2.0*3.14 * lidar_angle_max/360.0);
 							scan_msg.angle_increment = ((scan_msg.angle_max-scan_msg.angle_min) / (scan.n-1));
@@ -1082,6 +1142,7 @@ void I2CThread(void *pvParameters)
 						else
 						{
 							scan_msg.header.stamp = time;
+							scan_msg.header.seq = scan_msg.header.seq + 1;
 							scan_msg.angle_min = (2.0*3.14 * lidar_angle_max/360.0);
 							scan_msg.angle_max = (2.0*3.14 * lidar_angle_min/360.0);
 							scan_msg.angle_increment = ((scan_msg.angle_max-scan_msg.angle_min) / (scan.n-1));
