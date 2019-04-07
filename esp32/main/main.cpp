@@ -14,6 +14,7 @@ static const char * TAG = "MAIN";
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "esp_log.h"
 
+#define ENABLE_MOTOR_PID
 #define ENABLE_WIFI
 #define ENABLE_OTA
 #define ENABLE_I2C
@@ -21,7 +22,7 @@ static const char * TAG = "MAIN";
 #define ENABLE_IMU_BNO055
 #undef USE_RAWIMU
 #undef ENABLE_RTIMULIB
-#define ENABLE_TCPLOG
+#undef ENABLE_TCPLOG
 #define ENABLE_WATCHDOG
 
 #define CMD_BEEP                0x01
@@ -29,6 +30,10 @@ static const char * TAG = "MAIN";
 #define CMD_MOTORS_SET_SPEED    0x03
 #define CMD_ENCODERS            0x04
 #define CMD_GET_STATUS          0x06
+
+#ifdef ENABLE_MOTOR_PID
+#include "MiniPID.h"
+#endif
 
 #include "driver/gpio.h"
 #include "driver/i2c.h"
@@ -266,6 +271,13 @@ void vUpdateDisplay(struct SSD1306_Device* DisplayHandle)
 
 int64_t odo_last_time = 0;
 
+void cmd_vel_motor_update();
+
+#ifdef ENABLE_MOTOR_PID
+double motor_speed_l = 0.0;
+double motor_speed_r = 0.0;
+#endif
+
 void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 {
 	int64_t current_time = esp_timer_get_time();
@@ -313,82 +325,92 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 	y += delta_y;
 	th += delta_th;
 
-	ESP_LOGV(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f) x=%f y=%f th=%f",
-		enc_l,enc_r,
-		dt,
-		v_left,v_right,
-		x,y,th);
-
-		geometry_msgs::Quaternion odom_quat = tf::createQuaternionFromYaw(th);
-
-#if 0
-	geometry_msgs::TransformStamped odom_trans;
-	odom_trans.header.stamp = nh.now();
-	odom_trans.header.frame_id = "odom";
-	odom_trans.child_frame_id = "base_footprint";
-
-	odom_trans.transform.translation.x = x;
-	odom_trans.transform.translation.y = y;
-	odom_trans.transform.translation.z = 0.0;
-	odom_trans.transform.rotation = odom_quat;
-
-	//send the transform
-	tf_broadcaster.sendTransform(odom_trans);
+#ifdef ENABLE_MOTOR_PID
+	motor_speed_l = v_left * 1000;
+	motor_speed_r = v_right * 1000;
+	cmd_vel_motor_update();
 #endif
 
-	//Odometry message
-	odom_msg.header.stamp = nh.now();
-	odom_msg.header.seq = odom_msg.header.seq + 1;
-	odom_msg.header.frame_id = "odom";
+ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%f",
+	enc_l,enc_r,
+	dt,
+	v_left,v_right,
+	motor_speed_l,motor_speed_r,
+	x,y,th);
 
-	//set the position
-	odom_msg.pose.pose.position.x = x;
-	odom_msg.pose.pose.position.y = y;
-	odom_msg.pose.pose.position.z = 0.0;
-	odom_msg.pose.pose.orientation = odom_quat;
-
-	//set the velocity
-	odom_msg.child_frame_id = "base_link";
-	odom_msg.twist.twist.linear.x = vx;
-	odom_msg.twist.twist.linear.y = vy;
-	odom_msg.twist.twist.angular.z = vth;
-
-	if (v_left == 0 && v_right == 0){
-		odom_msg.pose.covariance[0] = 1e-9;
-		odom_msg.pose.covariance[7] = 1e-3;
-		odom_msg.pose.covariance[8] = 1e-9;
-		odom_msg.pose.covariance[14] = 1e6;
-		odom_msg.pose.covariance[21] = 1e6;
-		odom_msg.pose.covariance[28] = 1e6;
-		odom_msg.pose.covariance[35] = 1e-9;
-		odom_msg.twist.covariance[0] = 1e-9;
-		odom_msg.twist.covariance[7] = 1e-3;
-		odom_msg.twist.covariance[8] = 1e-9;
-		odom_msg.twist.covariance[14] = 1e6;
-		odom_msg.twist.covariance[21] = 1e6;
-		odom_msg.twist.covariance[28] = 1e6;
-		odom_msg.twist.covariance[35] = 1e-9;
-	}
-	else
+	if( nh.connected() )
 	{
-		odom_msg.pose.covariance[0] = 1e-3;
-		odom_msg.pose.covariance[7] = 1e-3;
-		odom_msg.pose.covariance[8] = 0.0;
-		odom_msg.pose.covariance[14] = 1e6;
-		odom_msg.pose.covariance[21] = 1e6;
-		odom_msg.pose.covariance[28] = 1e6;
-		odom_msg.pose.covariance[35] = 1e3;
-		odom_msg.twist.covariance[0] = 1e-3;
-		odom_msg.twist.covariance[7] = 1e-3;
-		odom_msg.twist.covariance[8] = 0.0;
-		odom_msg.twist.covariance[14] = 1e6;
-		odom_msg.twist.covariance[21] = 1e6;
-		odom_msg.twist.covariance[28] = 1e6;
-		odom_msg.twist.covariance[35] = 1e3;
-	}
+			geometry_msgs::Quaternion odom_quat = tf::createQuaternionFromYaw(th);
 
-	//publish the message
-	pub_odom.publish(&odom_msg);
+	#if 0
+		geometry_msgs::TransformStamped odom_trans;
+		odom_trans.header.stamp = nh.now();
+		odom_trans.header.frame_id = "odom";
+		odom_trans.child_frame_id = "base_footprint";
+
+		odom_trans.transform.translation.x = x;
+		odom_trans.transform.translation.y = y;
+		odom_trans.transform.translation.z = 0.0;
+		odom_trans.transform.rotation = odom_quat;
+
+		//send the transform
+		tf_broadcaster.sendTransform(odom_trans);
+	#endif
+
+		//Odometry message
+		odom_msg.header.stamp = nh.now();
+		odom_msg.header.seq = odom_msg.header.seq + 1;
+		odom_msg.header.frame_id = "odom";
+
+		//set the position
+		odom_msg.pose.pose.position.x = x;
+		odom_msg.pose.pose.position.y = y;
+		odom_msg.pose.pose.position.z = 0.0;
+		odom_msg.pose.pose.orientation = odom_quat;
+
+		//set the velocity
+		odom_msg.child_frame_id = "base_link";
+		odom_msg.twist.twist.linear.x = vx;
+		odom_msg.twist.twist.linear.y = vy;
+		odom_msg.twist.twist.angular.z = vth;
+
+		if (v_left == 0 && v_right == 0){
+			odom_msg.pose.covariance[0] = 1e-9;
+			odom_msg.pose.covariance[7] = 1e-3;
+			odom_msg.pose.covariance[8] = 1e-9;
+			odom_msg.pose.covariance[14] = 1e6;
+			odom_msg.pose.covariance[21] = 1e6;
+			odom_msg.pose.covariance[28] = 1e6;
+			odom_msg.pose.covariance[35] = 1e-9;
+			odom_msg.twist.covariance[0] = 1e-9;
+			odom_msg.twist.covariance[7] = 1e-3;
+			odom_msg.twist.covariance[8] = 1e-9;
+			odom_msg.twist.covariance[14] = 1e6;
+			odom_msg.twist.covariance[21] = 1e6;
+			odom_msg.twist.covariance[28] = 1e6;
+			odom_msg.twist.covariance[35] = 1e-9;
+		}
+		else
+		{
+			odom_msg.pose.covariance[0] = 1e-3;
+			odom_msg.pose.covariance[7] = 1e-3;
+			odom_msg.pose.covariance[8] = 0.0;
+			odom_msg.pose.covariance[14] = 1e6;
+			odom_msg.pose.covariance[21] = 1e6;
+			odom_msg.pose.covariance[28] = 1e6;
+			odom_msg.pose.covariance[35] = 1e3;
+			odom_msg.twist.covariance[0] = 1e-3;
+			odom_msg.twist.covariance[7] = 1e-3;
+			odom_msg.twist.covariance[8] = 0.0;
+			odom_msg.twist.covariance[14] = 1e6;
+			odom_msg.twist.covariance[21] = 1e6;
+			odom_msg.twist.covariance[28] = 1e6;
+			odom_msg.twist.covariance[35] = 1e3;
+		}
+
+		//publish the message
+		pub_odom.publish(&odom_msg);
+	}
 }
 
 bool nReadM32U4Status()
@@ -422,10 +444,7 @@ bool nReadM32U4Status()
 			int16_t enc_r = 0;
 			enc_r |= (buf[j++]<<8);
 			enc_r |= (buf[j++]<<0);
-			if( nh.connected() )
-			{
-				vHandleEncoderSteps(enc_l,enc_r);
-			}
+			vHandleEncoderSteps(enc_l,enc_r);
 			m32u4_status.enc_l += enc_l;
 			m32u4_status.enc_r += enc_r;
 			for(int i=0;i<5;i++)
@@ -441,15 +460,26 @@ bool nReadM32U4Status()
 	return res;
 }
 
+#ifdef ENABLE_MOTOR_PID
+MiniPID motor_pid_l(.05,.2,0.5);
+MiniPID motor_pid_r(.05,.2,0.5);
+#else
 int motor_r = 0;
 int motor_l = 0;
+#endif
+
 void cmd_vel_motor_update()
 {
 	i2c_cmd_handle_t CommandHandle = NULL;
 	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
 	{
+#ifdef ENABLE_MOTOR_PID
+		int16_t l = motor_pid_l.getOutput(motor_speed_l);
+		int16_t r = motor_pid_r.getOutput(motor_speed_r);
+#else
 		int16_t l = motor_l;
 		int16_t r = motor_r;
+#endif
 		i2c_master_start( CommandHandle );
 		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
 		i2c_master_write_byte( CommandHandle, CMD_MOTORS_SET_SPEED, true);
@@ -467,12 +497,18 @@ void cmd_vel_motor_update()
 
 void cmd_vel_motor_stop()
 {
+#ifdef ENABLE_MOTOR_PID
+  motor_pid_l.setSetpoint(0);
+  motor_pid_r.setSetpoint(0);
+  cmd_vel_motor_update();
+#else
 	if( motor_l!=0 || motor_r!=0 )
 	{
 		motor_r = 0;
 		motor_l = 0;
-		cmd_vel_motor_update();
+	  cmd_vel_motor_update();
 	}
+#endif
 }
 
 #ifdef USE_RAWIMU
@@ -732,6 +768,11 @@ void I2CThread(void *pvParameters)
 
 #endif
 
+#ifdef ENABLE_MOTOR_PID
+motor_pid_l.setOutputLimits(-255,255);
+motor_pid_r.setOutputLimits(-255,255);
+#endif
+
 #ifdef USE_RAWIMU
 	// init the sensor with slave address L3GD20H_I2C_ADDRESS_2 connected to I2C_BUS.
 	l3gd20h = l3gd20h_init_sensor ((i2c_port_t)I2CPortNumber, L3GD20H_I2C_ADDRESS_2, 0);
@@ -782,10 +823,13 @@ void I2CThread(void *pvParameters)
 #ifdef ENABLE_WATCHDOG
 		esp_task_wdt_feed();
 #endif
+
+#ifndef ENABLE_MOTOR_PID
 		if( !nh.connected() )
 		{
 			cmd_vel_motor_stop();
 		}
+#endif
 
 		if( nh.connected() && published==false )
 		{
@@ -1059,6 +1103,33 @@ void I2CThread(void *pvParameters)
 		}
 #endif
 
+#if 0
+#ifdef ENABLE_MOTOR_PID
+		{
+			int64_t t = esp_timer_get_time();
+			static int64_t _t = 0;
+			static int v = 0;
+			if( t > _t )
+			{
+				_t = t + 10000000;
+
+					if( v == -10 )
+					{
+						v = 100;
+						motor_pid_l.setSetpoint(v);
+						motor_pid_r.setSetpoint(-v);
+					}
+					else
+					{
+						v = -10;
+						motor_pid_l.setSetpoint(v);
+						motor_pid_r.setSetpoint(-v);
+					}
+			}
+		}
+#endif
+#endif
+
 #if 1
 		if( nReadM32U4Status() == true )
 		{
@@ -1216,11 +1287,18 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 		y = y/k;
 	}
 
+#ifdef ENABLE_MOTOR_PID
+	motor_pid_r.setSetpoint((int)(200.0*x)+(200.0*(y)));
+	motor_pid_l.setSetpoint((int)(200.0*x)-(200.0*(y)));
+	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%f mr=%f",
+	  vel_cmd.linear.x,vel_cmd.angular.z,
+		motor_pid_l.getOutput(),motor_pid_r.getOutput());
+#else
 	motor_r = (int)(200.0*x)+(200.0*(y));
 	motor_l = (int)(200.0*x)-(200.0*(y));
-
 	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%d mr=%d",
 	  vel_cmd.linear.x,vel_cmd.angular.z, motor_l,motor_r);
+#endif
 
 	cmd_vel_motor_update();
 }
