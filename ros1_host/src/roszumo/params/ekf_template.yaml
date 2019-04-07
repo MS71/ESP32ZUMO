@@ -80,7 +80,7 @@ odom0: /odom_raw
 # has no pose information, so the first six values would be meaningless in that case. Each vector defaults to all false
 # if unspecified, effectively making this parameter required for each sensor.
 odom0_config: [false, false, false,
-               false, false, false,
+               false, false, true,
                true, true, false,
                false, false, true,
                false, false, false]
@@ -155,9 +155,9 @@ imu0_config: [false, false, false,
 imu0_nodelay: false
 imu0_differential: false
 imu0_relative: false
-imu0_queue_size: 20
-imu0_pose_rejection_threshold: 0.01                  # Note the difference in parameter names
-imu0_twist_rejection_threshold: 0.01                 #
+imu0_queue_size: 2
+imu0_pose_rejection_threshold: 0.1                  # Note the difference in parameter names
+imu0_twist_rejection_threshold: 0.1                 #
 imu0_linear_acceleration_rejection_threshold: 0.005 #
 
 # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
@@ -176,7 +176,7 @@ imu0_remove_gravitational_acceleration: true
 # predicition. Note that if an acceleration measurement for the variable in question is available from one of the
 # inputs, the control term will be ignored.
 # Whether or not we use the control input during predicition. Defaults to false.
-use_control: false
+use_control: true
 # Whether the input (assumed to be cmd_vel) is a geometry_msgs/Twist or geometry_msgs/TwistStamped message. Defaults to
 # false.
 stamped_control: false
