@@ -1205,8 +1205,22 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 	double x = (double)1.0*vel_cmd.linear.x;
 	//double y = (double)1.0*vel_cmd.linear.y;
 	double y = (double)1.0*vel_cmd.angular.z;
-	x = (x>1.0)?1.0:((x<-1.0)?-1.0:x);
-	y = (y>1.0)?1.0:((y<-1.0)?-1.0:y);
+
+	if( x != 0 )
+	{
+		x = (x>1.0)?1.0:((x<-1.0)?-1.0:x);
+		y = (y>1.0)?1.0:((y<-1.0)?-1.0:y);
+	}
+	else
+	{
+		double z = vel_cmd.angular.z;
+		if( z>0 ) z=0.2;
+		if( z<0 ) z=-0.2;
+
+		x = -z;
+		y = z;
+	}
+
 	if((fabs(x)+fabs(y))>1.0)
 	{
 		double k = (fabs(x)+fabs(y));

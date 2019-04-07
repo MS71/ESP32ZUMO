@@ -10,7 +10,7 @@
     <param name="client_port" value="$(arg port)" />
     <param name="client_addr" value="$(arg addr)" />
   </node>
-  
+
   <!--node pkg="rosserial_python" type="message_info_service.py" name="rosserial_message_info" /-->
 
   <rosparam param="/BNO055Callibration">[0,0,0,-228,-1327,516,2,-3,-1,1000,992]</rosparam>
@@ -95,7 +95,7 @@
   </node>
 
 <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
-  <param name="controller_frequency" value="30"/>
+  <param name="controller_frequency" value="5"/>
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
   <rosparam file="$(find roszumo)/config/local_costmap_params.yaml" command="load" />
