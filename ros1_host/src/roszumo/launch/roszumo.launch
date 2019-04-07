@@ -59,7 +59,7 @@
   <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
     <param name="base_frame" value="$(arg base_frame)"/>
     <param name="odom_frame" value="$(arg odom_frame)"/>
-    <param name="map_update_interval" value="0.1"/>
+    <param name="map_update_interval" value="0.2"/>
     <param name="maxUrange" value="2.0"/>
     <param name="maxRange" value="2.0"/>
     <param name="sigma" value="0.05"/>
@@ -70,7 +70,7 @@
     <param name="lsigma" value="0.075"/>
     <param name="ogain" value="3.0"/>
     <param name="lskip" value="0"/>
-    <param name="minimumScore" value="20"/>
+    <param name="minimumScore" value="0.0"/>
     <param name="srr" value="0.1"/>
     <param name="srt" value="0.2"/>
     <param name="str" value="0.1"/>
@@ -78,7 +78,7 @@
     <param name="linearUpdate" value="0.5"/>
     <param name="angularUpdate" value="0.436"/>
     <param name="temporalUpdate" value="-1.0"/>
-    <param name="resampleThreshold" value="0.5"/>
+    <param name="resampleThreshold" value="0.1"/>
     <param name="particles" value="80"/>
 
     <param name="xmin" value="-1.0"/>
@@ -95,7 +95,7 @@
   </node>
 
 <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
-  <param name="controller_frequency" value="5"/>
+  <param name="controller_frequency" value="10"/>
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
   <rosparam file="$(find roszumo)/config/local_costmap_params.yaml" command="load" />

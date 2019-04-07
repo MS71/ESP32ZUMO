@@ -21,7 +21,7 @@ static const char * TAG = "MAIN";
 #define ENABLE_IMU_BNO055
 #undef USE_RAWIMU
 #undef ENABLE_RTIMULIB
-#undef ENABLE_TCPLOG
+#define ENABLE_TCPLOG
 #define ENABLE_WATCHDOG
 
 #define CMD_BEEP                0x01
@@ -933,10 +933,11 @@ void I2CThread(void *pvParameters)
 						bno055_vector_t vector_linaccl = bno055->getVectorLinearAccel();
 						int8_t temperature = bno055->getTemp();
 
+#if 0
 						bno055_vector_t euler = bno055->getVectorEuler();
 						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
 							euler.x,euler.y,euler.z);
-
+#endif
 						imu_msg.header.frame_id = "imu_link";
 						imu_msg.header.stamp = now;
 						imu_msg.header.seq = imu_msg.header.seq+1;
@@ -1203,23 +1204,10 @@ void I2CThread(void *pvParameters)
 void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 {
 	double x = (double)1.0*vel_cmd.linear.x;
-	//double y = (double)1.0*vel_cmd.linear.y;
 	double y = (double)1.0*vel_cmd.angular.z;
 
-	if( x != 0 )
-	{
-		x = (x>1.0)?1.0:((x<-1.0)?-1.0:x);
-		y = (y>1.0)?1.0:((y<-1.0)?-1.0:y);
-	}
-	else
-	{
-		double z = vel_cmd.angular.z;
-		if( z>0 ) z=0.2;
-		if( z<0 ) z=-0.2;
-
-		x = -z;
-		y = z;
-	}
+	x = (x>0.5)?0.5:((x<-0.5)?-0.5:x);
+	y = (y>0.5)?0.5:((y<-0.5)?-0.5:y);
 
 	if((fabs(x)+fabs(y))>1.0)
 	{
@@ -1231,9 +1219,8 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 	motor_r = (int)(200.0*x)+(200.0*(y));
 	motor_l = (int)(200.0*x)-(200.0*(y));
 
-	ESP_LOGI(TAG, "cmd_vel_callback %d,%d",
-		motor_l,
-		motor_r);
+	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%d mr=%d",
+	  vel_cmd.linear.x,vel_cmd.angular.z, motor_l,motor_r);
 
 	cmd_vel_motor_update();
 }
