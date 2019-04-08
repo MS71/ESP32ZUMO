@@ -14,10 +14,10 @@ static const char * TAG = "MAIN";
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "esp_log.h"
 
-#define ENABLE_MOTOR_PID
 #define ENABLE_WIFI
 #define ENABLE_OTA
 #define ENABLE_I2C
+#undef ENABLE_DISPLAY
 #define ENABLE_LIDAR
 #define ENABLE_IMU_BNO055
 #undef USE_RAWIMU
@@ -31,9 +31,7 @@ static const char * TAG = "MAIN";
 #define CMD_ENCODERS            0x04
 #define CMD_GET_STATUS          0x06
 
-#ifdef ENABLE_MOTOR_PID
 #include "MiniPID.h"
-#endif
 
 #include "driver/gpio.h"
 #include "driver/i2c.h"
@@ -47,10 +45,12 @@ static const char * TAG = "MAIN";
 #include "lwip/apps/sntp.h"
 #include "esp_int_wdt.h"
 
+#ifdef ENABLE_DISPLAY
 #include "ssd1306.h"
 #include "ssd1306_draw.h"
 #include "ssd1306_font.h"
 #include "ssd1306_default_if.h"
+#endif
 
 #ifdef ENABLE_IMU_BNO055
 #include "BNO055ESP32.h"
@@ -197,6 +197,7 @@ void vBeep(int frequency, int duration, int volume)
 	}
 }
 
+#ifdef ENABLE_DISPLAY
 static const int I2CDisplayAddress = 0x3C;
 static const int I2CDisplayWidth = 128;
 static const int I2CDisplayHeight = 64;
@@ -268,15 +269,14 @@ void vUpdateDisplay(struct SSD1306_Device* DisplayHandle)
 		SSD1306_Update( DisplayHandle );
 	}
 }
+#endif
 
 int64_t odo_last_time = 0;
 
 void cmd_vel_motor_update();
 
-#ifdef ENABLE_MOTOR_PID
 double motor_speed_l = 0.0;
 double motor_speed_r = 0.0;
-#endif
 
 void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 {
@@ -325,18 +325,18 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 	y += delta_y;
 	th += delta_th;
 
-#ifdef ENABLE_MOTOR_PID
-	motor_speed_l = v_left * 1000;
-	motor_speed_r = v_right * 1000;
+	motor_speed_l = v_left;
+	motor_speed_r = v_right;
 	cmd_vel_motor_update();
-#endif
 
+#if 0
 ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%f",
 	enc_l,enc_r,
 	dt,
 	v_left,v_right,
 	motor_speed_l,motor_speed_r,
 	x,y,th);
+#endif
 
 	if( nh.connected() )
 	{
@@ -374,6 +374,10 @@ ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%
 		odom_msg.twist.twist.linear.y = vy;
 		odom_msg.twist.twist.angular.z = vth;
 
+#if 1
+		odom_msg.pose.covariance[0] = -1;
+		odom_msg.twist.covariance[0] = -1;
+#else
 		if (v_left == 0 && v_right == 0){
 			odom_msg.pose.covariance[0] = 1e-9;
 			odom_msg.pose.covariance[7] = 1e-3;
@@ -407,6 +411,7 @@ ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%
 			odom_msg.twist.covariance[28] = 1e6;
 			odom_msg.twist.covariance[35] = 1e3;
 		}
+#endif
 
 		//publish the message
 		pub_odom.publish(&odom_msg);
@@ -460,26 +465,23 @@ bool nReadM32U4Status()
 	return res;
 }
 
-#ifdef ENABLE_MOTOR_PID
-MiniPID motor_pid_l(.05,.2,0.5);
-MiniPID motor_pid_r(.05,.2,0.5);
-#else
-int motor_r = 0;
-int motor_l = 0;
-#endif
+MiniPID motor_pid_l(.02,.1,0.5);
+MiniPID motor_pid_r(.02,.1,0.5);
 
 void cmd_vel_motor_update()
 {
 	i2c_cmd_handle_t CommandHandle = NULL;
 	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
 	{
-#ifdef ENABLE_MOTOR_PID
-		int16_t l = motor_pid_l.getOutput(motor_speed_l);
-		int16_t r = motor_pid_r.getOutput(motor_speed_r);
-#else
-		int16_t l = motor_l;
-		int16_t r = motor_r;
+		int16_t l = motor_pid_l.getOutput(motor_speed_l)*1000.0;
+		int16_t r = motor_pid_r.getOutput(motor_speed_r)*1000.0;
+
+#if 0
+		ESP_LOGI(TAG, "cmd_vel_motor_update L(%f,%f=>%d) R(%f,%f=>%d)",
+		motor_pid_l.getSetpoint(),motor_speed_l,l,
+		motor_pid_r.getSetpoint(),motor_speed_r,r);
 #endif
+
 		i2c_master_start( CommandHandle );
 		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
 		i2c_master_write_byte( CommandHandle, CMD_MOTORS_SET_SPEED, true);
@@ -497,18 +499,9 @@ void cmd_vel_motor_update()
 
 void cmd_vel_motor_stop()
 {
-#ifdef ENABLE_MOTOR_PID
   motor_pid_l.setSetpoint(0);
   motor_pid_r.setSetpoint(0);
   cmd_vel_motor_update();
-#else
-	if( motor_l!=0 || motor_r!=0 )
-	{
-		motor_r = 0;
-		motor_l = 0;
-	  cmd_vel_motor_update();
-	}
-#endif
 }
 
 #ifdef USE_RAWIMU
@@ -768,10 +761,8 @@ void I2CThread(void *pvParameters)
 
 #endif
 
-#ifdef ENABLE_MOTOR_PID
 motor_pid_l.setOutputLimits(-255,255);
 motor_pid_r.setOutputLimits(-255,255);
-#endif
 
 #ifdef USE_RAWIMU
 	// init the sensor with slave address L3GD20H_I2C_ADDRESS_2 connected to I2C_BUS.
@@ -822,13 +813,6 @@ motor_pid_r.setOutputLimits(-255,255);
 
 #ifdef ENABLE_WATCHDOG
 		esp_task_wdt_feed();
-#endif
-
-#ifndef ENABLE_MOTOR_PID
-		if( !nh.connected() )
-		{
-			cmd_vel_motor_stop();
-		}
 #endif
 
 		if( nh.connected() && published==false )
@@ -969,13 +953,17 @@ motor_pid_r.setOutputLimits(-255,255);
 				{
 					static ros::Time _prev;
 					ros::Time now = nh.now();
-					if( now.toSec() > (_prev.toSec() + 0.1) )
+					if( now.toSec() > (_prev.toSec() + 0.01) )
 					{
 						_prev = now;
 						bno055_quaternion_t quaternion = bno055->getQuaternion();
 						bno055_vector_t vector_angvel = bno055->getVectorGyroscope();
 						bno055_vector_t vector_linaccl = bno055->getVectorLinearAccel();
 						int8_t temperature = bno055->getTemp();
+
+						double cov_orientation = 0.05;
+						double cov_velocity = 0.025;
+						double cov_acceleration = 0.1;
 
 #if 0
 						bno055_vector_t euler = bno055->getVectorEuler();
@@ -989,13 +977,13 @@ motor_pid_r.setOutputLimits(-255,255);
 						imu_msg.orientation.y = quaternion.y;
 						imu_msg.orientation.z = quaternion.z;
 						imu_msg.orientation.w = quaternion.w;
-#if 1
+#if 0
 						imu_msg.orientation_covariance[0] = -1.0;
 #else
 						const double orientation_covariance[9] = {
-								1.0, 0.0, 0.0,
-								0.0, 1.0,	0.0,
-								0.0, 0.0,	1.0 };
+								cov_orientation, 0.0, 0.0,
+								0.0, cov_orientation,	0.0,
+								0.0, 0.0,	cov_orientation };
 						memcpy(imu_msg.orientation_covariance,
 							orientation_covariance,
 							sizeof(imu_msg.orientation_covariance));
@@ -1008,24 +996,24 @@ motor_pid_r.setOutputLimits(-255,255);
 						imu_msg.angular_velocity_covariance[0] = -1.0;
 #else
 						const double angular_velocity_covariance[9] = {
-							1.0, 0.0, 0.0,
-							0.0, 1.0,	0.0,
-							0.0, 0.0,	1.0 };
+							cov_velocity, 0.0, 0.0,
+							0.0, cov_velocity,	0.0,
+							0.0, 0.0,	cov_velocity };
 						memcpy(imu_msg.angular_velocity_covariance,
 							angular_velocity_covariance,
 							sizeof(imu_msg.angular_velocity_covariance));
 #endif
 
 						imu_msg.linear_acceleration.x = vector_linaccl.x/* / 100.0*/;
-						imu_msg.linear_acceleration.y =vector_linaccl.y/* / 100.0*/;
+						imu_msg.linear_acceleration.y = vector_linaccl.y/* / 100.0*/;
 						imu_msg.linear_acceleration.z = vector_linaccl.z/* / 100.0*/;
-#if 1
+#if 0
 						imu_msg.linear_acceleration_covariance[0] = -1.0;
 #else
 						const double linear_acceleration_covariance[9] = {
-							1.0, 0.0, 0.0,
-							0.0, 1.0,	0.0,
-							0.0, 0.0,	1.0 };
+							cov_acceleration, 0.0, 0.0,
+							0.0, cov_acceleration,	0.0,
+							0.0, 0.0,	cov_acceleration };
 						memcpy(imu_msg.linear_acceleration_covariance,
 							linear_acceleration_covariance,
 							sizeof(imu_msg.linear_acceleration_covariance));
@@ -1104,30 +1092,29 @@ motor_pid_r.setOutputLimits(-255,255);
 #endif
 
 #if 0
-#ifdef ENABLE_MOTOR_PID
 		{
 			int64_t t = esp_timer_get_time();
 			static int64_t _t = 0;
-			static int v = 0;
+			static double v = 0;
 			if( t > _t )
 			{
-				_t = t + 10000000;
+				_t = t + 3000000;
+				double _v = 0.05;
 
-					if( v == -10 )
-					{
-						v = 100;
-						motor_pid_l.setSetpoint(v);
-						motor_pid_r.setSetpoint(-v);
-					}
-					else
-					{
-						v = -10;
-						motor_pid_l.setSetpoint(v);
-						motor_pid_r.setSetpoint(-v);
-					}
+				if( v == _v )
+				{
+					v = -_v;
+					motor_pid_l.setSetpoint(v);
+					motor_pid_r.setSetpoint(v);
+				}
+				else
+				{
+					v = _v;
+					motor_pid_l.setSetpoint(v);
+					motor_pid_r.setSetpoint(v);
+				}
 			}
 		}
-#endif
 #endif
 
 #if 1
@@ -1178,23 +1165,22 @@ motor_pid_r.setOutputLimits(-255,255);
 						ros::Time time = nh.now();
 						ros::Duration dT;
 						dT.fromSec(0.000001*(esp_timer_get_time()-scan.t_first));
-
 						time -= dT;
 
-
-						const float lidar_angle_min = -(360.0*(NUM_LIDAR_SCANS-2)/40)/2.0;
-						const float lidar_angle_max = +(360.0*(NUM_LIDAR_SCANS-2)/40)/2.0;
+						const float lidar_angle_min = -(360.0*(NUM_LIDAR_SCANS-1)/40)/2.0;
+						const float lidar_angle_max = +(360.0*(NUM_LIDAR_SCANS-1)/40)/2.0;
 						scan_msg.ranges = (float*)realloc(scan_msg.ranges,sizeof(float)*scan.n);
 						scan_msg.intensities = (float*)realloc(scan_msg.intensities,sizeof(float)*scan.n);
 						scan_msg.ranges_length = scan.n;
 						scan_msg.intensities_length = scan.n;
 						scan_msg.header.frame_id = "laser_link";
+						scan_msg.scan_time = (0.000001*(scan.t_last-scan.t_first));
 						if( scan.dir == -1 )
 						{
 							scan_msg.header.stamp = time;
 							scan_msg.header.seq = scan_msg.header.seq + 1;
-							scan_msg.angle_min = (2.0*3.14 * lidar_angle_min/360.0);
-							scan_msg.angle_max = (2.0*3.14 * lidar_angle_max/360.0);
+							scan_msg.angle_min = (2.0*M_PI * lidar_angle_min/360.0);
+							scan_msg.angle_max = (2.0*M_PI * lidar_angle_max/360.0);
 							scan_msg.angle_increment = ((scan_msg.angle_max-scan_msg.angle_min) / (scan.n-1));
 							for( int i=0;i<scan.n; i++ )
 							{
@@ -1263,7 +1249,9 @@ motor_pid_r.setOutputLimits(-255,255);
 			}
 		}
 
+#ifdef ENABLE_DISPLAY
 		vUpdateDisplay(&I2CDisplay);
+#endif
 
 		nh.spinOnce();
 	}
@@ -1277,8 +1265,10 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 	double x = (double)1.0*vel_cmd.linear.x;
 	double y = (double)1.0*vel_cmd.angular.z;
 
-	x = (x>0.5)?0.5:((x<-0.5)?-0.5:x);
-	y = (y>0.5)?0.5:((y<-0.5)?-0.5:y);
+	double vmax = 0.1;
+
+	//x = (x>vmax)?vmax:((x<-vmax)?-vmax:x);
+	//y = (y>vmax)?vmax:((y<-vmax)?-vmax:y);
 
 	if((fabs(x)+fabs(y))>1.0)
 	{
@@ -1287,18 +1277,12 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 		y = y/k;
 	}
 
-#ifdef ENABLE_MOTOR_PID
-	motor_pid_r.setSetpoint((int)(200.0*x)+(200.0*(y)));
-	motor_pid_l.setSetpoint((int)(200.0*x)-(200.0*(y)));
+	motor_pid_r.setSetpoint((double)(x)+(y));
+	motor_pid_l.setSetpoint((double)(x)-(y));
+
 	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%f mr=%f",
 	  vel_cmd.linear.x,vel_cmd.angular.z,
 		motor_pid_l.getOutput(),motor_pid_r.getOutput());
-#else
-	motor_r = (int)(200.0*x)+(200.0*(y));
-	motor_l = (int)(200.0*x)-(200.0*(y));
-	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%d mr=%d",
-	  vel_cmd.linear.x,vel_cmd.angular.z, motor_l,motor_r);
-#endif
 
 	cmd_vel_motor_update();
 }
@@ -1550,10 +1534,12 @@ void app_main(void)
 #endif
 
 #ifdef ENABLE_I2C
+#ifdef ENABLE_DISPLAY
 	ESP_LOGI(TAG, "main() display init ...");
 	assert( SSD1306_I2CMasterAttachDisplayDefault( &I2CDisplay,
 		I2CDisplayWidth, I2CDisplayHeight,
 		I2CDisplayAddress, I2CResetPin ) == true );
+#endif
 
 	ESP_LOGI(TAG, "main() lidar init ...");
 #ifdef ENABLE_LIDAR

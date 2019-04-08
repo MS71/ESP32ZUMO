@@ -77,6 +77,11 @@ void lidar::handle()
 {
   if(sensor.dataReady())
   {
+    static int64_t t_prev = 0;
+    int64_t t_now = esp_timer_get_time();
+    int64_t t_sample = t_prev+(t_now-t_prev)/2;
+    t_prev = t_now;
+
     sensor.read();
     if( sensor.ranging_data.range_status == VL53L1X::RangeValid )
     {
@@ -131,11 +136,13 @@ void lidar::handle()
     {
       if( lidar_motor_steps >= (NUM_LIDAR_SCANS-1) )
       {
-        active_scan.t_last = esp_timer_get_time();
+        active_scan.t_last = t_sample;
         active_scan.n = NUM_LIDAR_SCANS;
         active_scan.dir = lidar_motor_dir;
         frozen_scan = active_scan;
         active_scan.t_first = active_scan.t_last;
+        active_scan.t_last = 0;
+        active_scan.n = 0;
         lidar_motor_dir = -1;
 
         if( min_range_mm != 0xffff )
@@ -149,11 +156,13 @@ void lidar::handle()
     {
       if( lidar_motor_steps <= 0 )
       {
-        active_scan.t_last = esp_timer_get_time();
+        active_scan.t_last = t_sample;
         active_scan.n = NUM_LIDAR_SCANS;
         active_scan.dir = lidar_motor_dir;
         frozen_scan = active_scan;
         active_scan.t_first = active_scan.t_last;
+        active_scan.t_last = 0;
+        active_scan.n = 0;
         lidar_motor_dir = 1;
       }
     }

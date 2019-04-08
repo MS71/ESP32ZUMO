@@ -7,29 +7,8 @@ teleop:
       -
         axis: 1
         target: linear.x
-        scale: 0.5
+        scale: 0.05
       -
         axis: 0
         target: angular.z
-        scale: 0.5
-
-  laser_on:
-    type: topic
-    message_type: std_msgs/String
-    topic_name: laser
-    deadman_buttons: [5]
-    message_value:
-      -
-        target: data
-        value: 'on'
-
-  laser_off:
-    type: topic
-    message_type: std_msgs/String
-    topic_name: laser
-    deadman_buttons: [7]
-    message_value:
-      -
-        target: data
-        value: 'off'
-        
+        scale: 0.01

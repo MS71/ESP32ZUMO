@@ -21,6 +21,7 @@ public:
 	void setSetpointRange(double);
 	void setOutputFilter(double);
 	double getOutput();
+	double getSetpoint() { return setpoint; }
 	double getOutput(double);
 	double getOutput(double, double);
 
@@ -38,7 +39,7 @@ private:
 	double maxError;
 	double errorSum;
 
-	double maxOutput; 
+	double maxOutput;
 	double minOutput;
 
 	double setpoint;
