@@ -1262,6 +1262,36 @@ motor_pid_r.setOutputLimits(-255,255);
  */
 void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 {
+#if 1
+	double wheel0_speed = 0;
+	double wheel1_speed = 0;
+
+	double wheelbase_ = 0.09;
+
+	// *** Compute the current wheel speeds ***
+	// First compute the Robot's linear and angular speeds
+	double xspeed = vel_cmd.linear.x;
+	double yspeed = vel_cmd.linear.y;
+	double linear_speed = sqrt (xspeed * xspeed + yspeed * yspeed);
+	double angular_speed = vel_cmd.angular.z;
+
+	if( vel_cmd.linear.x >= 0 )
+	{
+		// robot is moving forward
+		wheel0_speed = linear_speed + angular_speed * wheelbase_ / 2.0;
+		wheel1_speed = linear_speed - angular_speed * wheelbase_ / 2.0;
+	}
+	else
+	{
+		// robot is backing up
+		wheel0_speed = -linear_speed + angular_speed * wheelbase_ / 2.0;
+		wheel1_speed = -linear_speed - angular_speed * wheelbase_ / 2.0;
+	}
+
+	motor_pid_l.setSetpoint(wheel1_speed);
+	motor_pid_r.setSetpoint(wheel0_speed);
+
+#else
 	double x = (double)1.0*vel_cmd.linear.x;
 	double y = (double)1.0*vel_cmd.angular.z;
 
@@ -1279,10 +1309,11 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 
 	motor_pid_r.setSetpoint((double)(x)+(y));
 	motor_pid_l.setSetpoint((double)(x)-(y));
+#endif
 
-	ESP_LOGI(TAG, "cmd_vel_callback x=%f,w=%f => ml=%f mr=%f",
-	  vel_cmd.linear.x,vel_cmd.angular.z,
-		motor_pid_l.getOutput(),motor_pid_r.getOutput());
+	ESP_LOGI(TAG, "cmd_vel_callback Twist(x:%f,y:%f,z:%f) M(%f,%f)",
+	  vel_cmd.linear.x,vel_cmd.linear.y,vel_cmd.angular.z,
+		motor_pid_l.getSetpoint(),motor_pid_r.getSetpoint());
 
 	cmd_vel_motor_update();
 }
