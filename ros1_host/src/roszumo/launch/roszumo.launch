@@ -94,8 +94,7 @@
   </node>
 
 <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
-  <param name="controller_frequency" value="50"/>
-  <param name="clearing_rotation_allowed" value="false"/>
+  <param name="controller_frequency" value="10"/>
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
   <rosparam file="$(find roszumo)/config/local_costmap_params.yaml" command="load" />

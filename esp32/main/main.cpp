@@ -107,6 +107,13 @@ char imucalib_buf[256] = "";
 std_msgs::String imucalib_msg;
 ros::Publisher pub_imucalib("imucalib", &imucalib_msg);
 
+std_msgs::Float32 headingx_msg;
+std_msgs::Float32 headingy_msg;
+std_msgs::Float32 headingz_msg;
+ros::Publisher pub_headingx("headingx", &headingx_msg);
+ros::Publisher pub_headingy("headingy", &headingy_msg);
+ros::Publisher pub_headingz("headingz", &headingz_msg);
+
 std_msgs::Float32 ubat_msg;
 ros::Publisher pub_ubat("ubat", &ubat_msg);
 
@@ -596,7 +603,9 @@ void I2CThread(void *pvParameters)
 			bno055->enableExternalCrystal();
 			//bno.setSensorOffsets(storedOffsets);
 			//bno055->setAxisRemap(BNO055_REMAP_CONFIG_P0, BNO055_REMAP_SIGN_P0); // see datasheet, section 3.4
+			//bno055->setAxisRemap(BNO055_REMAP_CONFIG_P1, BNO055_REMAP_SIGN_P1); // see datasheet, section 3.4
 			bno055->setAxisRemap(BNO055_REMAP_CONFIG_P2, BNO055_REMAP_SIGN_P2); // see datasheet, section 3.4
+			//xxbno055->setAxisRemap(BNO055_REMAP_CONFIG_P3, BNO055_REMAP_SIGN_P3); // see datasheet, section 3.4
 
 			bno055->setUnits(BNO055_UNIT_ACCEL_MS2,
 										BNO055_UNIT_ANGULAR_RATE_RPS,
@@ -828,6 +837,9 @@ motor_pid_r.setOutputLimits(-255,255);
 
 			nh.advertise(pub_ubat);
 			nh.advertise(pub_imucalib);
+			nh.advertise(pub_headingx);
+			nh.advertise(pub_headingy);
+			nh.advertise(pub_headingz);
 			nh.advertise(pub_wifirssi);
 			linesensor_msg.layout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension)*2);
 		  linesensor_msg.layout.dim[0].label = "height";
@@ -887,8 +899,8 @@ motor_pid_r.setOutputLimits(-255,255);
 			try {
 				if( /*nh.connected() && published==true &&*/ bno055_configured==false )
 				{
+#if 1
 					ESP_LOGI(TAG, "BNO055 try get BNO055Callibration param ...");
-
 
 					//bno055->setOprModeConfig();
 					int p[3+3+3+2] = {8,7,1,180,-695,574,-2,-2,-1,1000,372};
@@ -915,7 +927,7 @@ motor_pid_r.setOutputLimits(-255,255);
 						o.magOffsetX,o.magOffsetY,o.magOffsetZ,
 						o.gyroOffsetX,o.gyroOffsetY,o.gyroOffsetZ,
 						o.accelRadius,o.magRadius);
-
+#endif
 					bno055->setOprModeNdof();
 					bno055_configured = true;
 				}
@@ -950,23 +962,6 @@ motor_pid_r.setOutputLimits(-255,255);
 							pub_imucalib.publish( &imucalib_msg );
 						}
 					}
-
-#if 1
-					{
-						bno055_vector_t euler = bno055->getVectorEuler();
-						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
-							euler.x,euler.y,euler.z);
-					}
-#endif
-
-#if 0
-					{
-						bno055_quaternion_t quaternion = bno055->getQuaternion();
-						ESP_LOGI(TAG, "I2CThread() BNO055 quaternion x=%f, y=%f, z=%f, w=%f",
-							quaternion.x,quaternion.y,quaternion.z,quaternion.w);
-					}
-#endif
-
 				}
 				if( nh.connected() && published==true && bno055_configured==true )
 				{
@@ -984,16 +979,19 @@ motor_pid_r.setOutputLimits(-255,255);
 						double cov_velocity = 0.02;
 						double cov_acceleration = 0.04;
 
-#if 0
 						bno055_vector_t euler = bno055->getVectorEuler();
-						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
-							euler.x,euler.y,euler.z);
-#endif
+						headingx_msg.data = (float)euler.x;
+						pub_headingx.publish( &headingx_msg );
+						headingy_msg.data = (float)euler.y;
+						pub_headingy.publish( &headingy_msg );
+						headingz_msg.data = (float)euler.z;
+						pub_headingz.publish( &headingz_msg );
+
 						imu_msg.header.frame_id = "imu_link";
 						imu_msg.header.stamp = now;
 						imu_msg.header.seq = imu_msg.header.seq+1;
-						imu_msg.orientation.x = quaternion.x;
-						imu_msg.orientation.y = quaternion.y;
+						imu_msg.orientation.x = quaternion.y;
+						imu_msg.orientation.y = -quaternion.x;
 						imu_msg.orientation.z = quaternion.z;
 						imu_msg.orientation.w = quaternion.w;
 #if 0
@@ -1008,8 +1006,8 @@ motor_pid_r.setOutputLimits(-255,255);
 							sizeof(imu_msg.orientation_covariance));
 #endif
 
-						imu_msg.angular_velocity.x = vector_angvel.x/* * M_PI / 180.0*/;
-						imu_msg.angular_velocity.y = vector_angvel.y/* * M_PI / 180.0*/;
+						imu_msg.angular_velocity.x = vector_angvel.y/* * M_PI / 180.0*/;
+						imu_msg.angular_velocity.y = -vector_angvel.x/* * M_PI / 180.0*/;
 						imu_msg.angular_velocity.z = vector_angvel.z/* * M_PI / 180.0*/;
 #if 0
 						imu_msg.angular_velocity_covariance[0] = -1.0;
@@ -1023,8 +1021,8 @@ motor_pid_r.setOutputLimits(-255,255);
 							sizeof(imu_msg.angular_velocity_covariance));
 #endif
 
-						imu_msg.linear_acceleration.x = vector_linaccl.x/* / 100.0*/;
-						imu_msg.linear_acceleration.y = vector_linaccl.y/* / 100.0*/;
+						imu_msg.linear_acceleration.x = vector_linaccl.y/* / 100.0*/;
+						imu_msg.linear_acceleration.y = -vector_linaccl.x/* / 100.0*/;
 						imu_msg.linear_acceleration.z = vector_linaccl.z/* / 100.0*/;
 #if 0
 						imu_msg.linear_acceleration_covariance[0] = -1.0;
@@ -1550,11 +1548,10 @@ void app_main(void)
 	i2c_driver_install( (i2c_port_t)I2CPortNumber, Config.mode, 0, 0, 0 );
 	i2c_set_timeout((i2c_port_t)I2CPortNumber, (I2C_APB_CLK_FREQ / Config.master.clk_speed)*1024);
 
+	vBeep(330,500,200);
 #ifdef ENABLE_IMU_BNO055
 	vResetBNO055();
 #endif
-
-	vBeep(1000,100,20);
 
 	{
 		i2c_cmd_handle_t CommandHandle = NULL;
