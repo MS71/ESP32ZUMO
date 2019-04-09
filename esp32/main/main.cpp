@@ -1184,8 +1184,8 @@ motor_pid_r.setOutputLimits(-255,255);
 						dT.fromSec(0.000001*(esp_timer_get_time()-scan.t_first));
 						time -= dT;
 
-						const float lidar_angle_min = -(360.0*(NUM_LIDAR_SCANS-1)/40)/2.0;
-						const float lidar_angle_max = +(360.0*(NUM_LIDAR_SCANS-1)/40)/2.0;
+						const float lidar_angle_min = -(360.0*(NUM_LIDAR_SCANS)/40)/2.0;
+						const float lidar_angle_max = +(360.0*(NUM_LIDAR_SCANS)/40)/2.0;
 						scan_msg.ranges = (float*)realloc(scan_msg.ranges,sizeof(float)*scan.n);
 						scan_msg.intensities = (float*)realloc(scan_msg.intensities,sizeof(float)*scan.n);
 						scan_msg.ranges_length = scan.n;

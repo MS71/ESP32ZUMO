@@ -25,12 +25,12 @@ two_d_mode: true
 
 # If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see if the node is
 # unhappy with any settings or data.
-print_diagnostics: true
+print_diagnostics: false
 
 # Debug settings. Not for the faint of heart. Outputs a ludicrous amount of information to the file specified by
 # debug_out_file. I hope you like matrices! Please note that setting this to true will have strongly deleterious
 # effects on the performance of the node. Defaults to false if unspecified.
-debug: true
+debug: false
 
 # Defaults to "robot_localization_debug.txt" if unspecified. Please specify the full path.
 debug_out_file: /tmp/ekf.txt
@@ -65,6 +65,8 @@ odom_frame: odom            # Defaults to "odom" if unspecified
 base_link_frame: base_footprint  # Defaults to "base_link" if unspecified
 world_frame: odom           # Defaults to the value of odom_frame if unspecified
 
+history_length: 2
+
 # The filter accepts an arbitrary number of inputs from each input message type (nav_msgs/Odometry,
 # geometry_msgs/PoseWithCovarianceStamped, geometry_msgs/TwistWithCovarianceStamped,
 # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
@@ -92,7 +94,7 @@ odom0_config: [false, false, false,
 
 # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
 # the size of the subscription queue so that more measurements are fused.
-odom0_queue_size: 10
+odom0_queue_size: 500
 
 # [ADVANCED] Large messages in ROS can exhibit strange behavior when they arrive at a high frequency. This is a result
 # of Nagle's algorithm. This option tells the ROS subscriber to use the tcpNoDelay option, which disables Nagle's
@@ -157,7 +159,7 @@ imu0_relative: false
 
 
 imu0_nodelay: false
-imu0_queue_size: 10
+imu0_queue_size: 500
 __imu0_pose_rejection_threshold: 0.8                  # Note the difference in parameter names
 __imu0_twist_rejection_threshold: 0.8                 #
 imu0_linear_acceleration_rejection_threshold: 0.005 #
