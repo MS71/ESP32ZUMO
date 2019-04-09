@@ -103,6 +103,10 @@ static const int SDAPin = CONFIG_SSD1306_DEFAULT_I2C_SDA_PIN;
 char rosCoreHostName[] = "z600.fritz.box";
 ros::NodeHandle  nh;
 
+char imucalib_buf[256] = "";
+std_msgs::String imucalib_msg;
+ros::Publisher pub_imucalib("imucalib", &imucalib_msg);
+
 std_msgs::Float32 ubat_msg;
 ros::Publisher pub_ubat("ubat", &ubat_msg);
 
@@ -591,6 +595,7 @@ void I2CThread(void *pvParameters)
 			bno055->setOprModeConfig();
 			bno055->enableExternalCrystal();
 			//bno.setSensorOffsets(storedOffsets);
+			//bno055->setAxisRemap(BNO055_REMAP_CONFIG_P0, BNO055_REMAP_SIGN_P0); // see datasheet, section 3.4
 			bno055->setAxisRemap(BNO055_REMAP_CONFIG_P2, BNO055_REMAP_SIGN_P2); // see datasheet, section 3.4
 
 			bno055->setUnits(BNO055_UNIT_ACCEL_MS2,
@@ -822,6 +827,7 @@ motor_pid_r.setOutputLimits(-255,255);
 			ESP_LOGI(TAG, "ROS publish ...");
 
 			nh.advertise(pub_ubat);
+			nh.advertise(pub_imucalib);
 			nh.advertise(pub_wifirssi);
 			linesensor_msg.layout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension)*2);
 		  linesensor_msg.layout.dim[0].label = "height";
@@ -883,8 +889,9 @@ motor_pid_r.setOutputLimits(-255,255);
 				{
 					ESP_LOGI(TAG, "BNO055 try get BNO055Callibration param ...");
 
+
 					//bno055->setOprModeConfig();
-					int p[3+3+3+2] = {8,7,1,-56,-486,552,2,-3,-1,1000,936};
+					int p[3+3+3+2] = {8,7,1,180,-695,574,-2,-2,-1,1000,372};
 					//nh.getParam("/BNO055Callibration", p, 11, 100);
 
 					bno055_offsets_t o;
@@ -930,9 +937,21 @@ motor_pid_r.setOutputLimits(-255,255);
 							bno055_offsets.magOffsetX,bno055_offsets.magOffsetY,bno055_offsets.magOffsetZ,
 							bno055_offsets.gyroOffsetX,bno055_offsets.gyroOffsetY,bno055_offsets.gyroOffsetZ,
 							bno055_offsets.accelRadius,bno055_offsets.magRadius);
+
+						if( nh.connected() && published==true )
+						{
+							sprintf(imucalib_buf,"BNO055 calib(%d,%d,%d,%d) [%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d]",
+								bno055_calib.sys, bno055_calib.gyro, bno055_calib.mag, bno055_calib.accel,
+								bno055_offsets.accelOffsetX,bno055_offsets.accelOffsetY,bno055_offsets.accelOffsetZ,
+								bno055_offsets.magOffsetX,bno055_offsets.magOffsetY,bno055_offsets.magOffsetZ,
+								bno055_offsets.gyroOffsetX,bno055_offsets.gyroOffsetY,bno055_offsets.gyroOffsetZ,
+								bno055_offsets.accelRadius,bno055_offsets.magRadius);
+							imucalib_msg.data = imucalib_buf;
+							pub_imucalib.publish( &imucalib_msg );
+						}
 					}
 
-#if 0
+#if 1
 					{
 						bno055_vector_t euler = bno055->getVectorEuler();
 						ESP_LOGI(TAG, "I2CThread() BNO055 euler x=%f, y=%f, z=%f",
@@ -961,9 +980,9 @@ motor_pid_r.setOutputLimits(-255,255);
 						bno055_vector_t vector_linaccl = bno055->getVectorLinearAccel();
 						int8_t temperature = bno055->getTemp();
 
-						double cov_orientation = 0.05;
-						double cov_velocity = 0.025;
-						double cov_acceleration = 0.1;
+						double cov_orientation = 0.08;
+						double cov_velocity = 0.02;
+						double cov_acceleration = 0.04;
 
 #if 0
 						bno055_vector_t euler = bno055->getVectorEuler();
