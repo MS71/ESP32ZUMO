@@ -1,7 +1,7 @@
 # The frequency, in Hz, at which the filter will output a position estimate. Note that the filter will not begin
 # computation until it receives at least one message from one of the inputs. It will then run continuously at the
 # frequency specified here, regardless of whether it receives more measurements. Defaults to 30 if unspecified.
-frequency: 500
+frequency: 1000
 
 # The period, in seconds, after which we consider a sensor to have timed out. In this event, we carry out a predict
 # cycle on the EKF without correcting it. This parameter can be thought of as the minimum frequency with which the
@@ -65,8 +65,6 @@ odom_frame: odom            # Defaults to "odom" if unspecified
 base_link_frame: base_footprint  # Defaults to "base_link" if unspecified
 world_frame: odom           # Defaults to the value of odom_frame if unspecified
 
-history_length: 2
-
 # The filter accepts an arbitrary number of inputs from each input message type (nav_msgs/Odometry,
 # geometry_msgs/PoseWithCovarianceStamped, geometry_msgs/TwistWithCovarianceStamped,
 # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
@@ -81,7 +79,7 @@ odom0: /odom_raw
 # do not provide some of the state variables estimated by the filter. For example, a TwistWithCovarianceStamped message
 # has no pose information, so the first six values would be meaningless in that case. Each vector defaults to all false
 # if unspecified, effectively making this parameter required for each sensor.
-odom0_config: [false, false, false,
+odom0_config: [false, true, false,
                false, false, false,
                true, true, false,
                false, false, true,
@@ -94,12 +92,12 @@ odom0_config: [false, false, false,
 
 # If you have high-frequency data or are running with a low frequency parameter value, then you may want to increase
 # the size of the subscription queue so that more measurements are fused.
-odom0_queue_size: 500
+odom0_queue_size: 100
 
 # [ADVANCED] Large messages in ROS can exhibit strange behavior when they arrive at a high frequency. This is a result
 # of Nagle's algorithm. This option tells the ROS subscriber to use the tcpNoDelay option, which disables Nagle's
 # algorithm.
-odom0_nodelay: false
+odom0_nodelay: true
 
 # [ADVANCED] When measuring one pose variable with two sensors, a situation can arise in which both sensors under-
 # report their covariances. This can lead to the filter rapidly jumping back and forth between each measurement as they
@@ -158,15 +156,15 @@ imu0_differential: false
 imu0_relative: false
 
 
-imu0_nodelay: false
-imu0_queue_size: 500
+imu0_nodelay: true
+imu0_queue_size: 100
 __imu0_pose_rejection_threshold: 0.8                  # Note the difference in parameter names
 __imu0_twist_rejection_threshold: 0.8                 #
-imu0_linear_acceleration_rejection_threshold: 0.005 #
+imu0_linear_acceleration_rejection_threshold: 0.001 #
 
 # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
 # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
-imu0_remove_gravitational_acceleration: true
+imu0_remove_gravitational_acceleration: false
 
 # [ADVANCED]  The EKF and UKF models follow a standard predict/correct cycle. During prediction, if there is no
 # acceleration reference, the velocity at time t+1 is simply predicted to be the same as the velocity at time t. During

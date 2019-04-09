@@ -1204,7 +1204,7 @@ motor_pid_r.setOutputLimits(-255,255);
 								if( scan.ranges[i] == 0xffff )
 								{
 									scan_msg.intensities[i] = 0.0;
-									scan_msg.ranges[i] = 0.0;
+									scan_msg.ranges[i] = 5.0;
 								}
 								else
 								{
