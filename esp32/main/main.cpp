@@ -17,7 +17,7 @@ static const char * TAG = "MAIN";
 #define ENABLE_WIFI
 #define ENABLE_OTA
 #define ENABLE_I2C
-#undef ENABLE_DISPLAY
+#define ENABLE_DISPLAY
 #define ENABLE_LIDAR
 #define ENABLE_IMU_BNO055
 #undef USE_RAWIMU
@@ -62,8 +62,11 @@ static const char * TAG = "MAIN";
 #include "std_msgs/Float32.h"
 #include "std_msgs/Int8.h"
 #include "std_msgs/UInt16MultiArray.h"
+#include "std_msgs/UInt8MultiArray.h"
 #include "std_msgs/Int32MultiArray.h"
+#include "std_msgs/Float32MultiArray.h"
 #include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/Range.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "geometry_msgs/Quaternion.h"
 #include "geometry_msgs/Twist.h"
@@ -114,6 +117,19 @@ ros::Publisher pub_headingx("headingx", &headingx_msg);
 ros::Publisher pub_headingy("headingy", &headingy_msg);
 ros::Publisher pub_headingz("headingz", &headingz_msg);
 
+std_msgs::Float32 motor_pid_l_set;
+std_msgs::Float32 motor_pid_l_out;
+std_msgs::Float32 motor_pid_l_val;
+ros::Publisher pub_motor_pid_l_set("motor_pid_l_set", &motor_pid_l_set);
+ros::Publisher pub_motor_pid_l_out("motor_pid_l_out", &motor_pid_l_out);
+ros::Publisher pub_motor_pid_l_val("motor_pid_l_val", &motor_pid_l_val);
+std_msgs::Float32 motor_pid_r_set;
+std_msgs::Float32 motor_pid_r_out;
+std_msgs::Float32 motor_pid_r_val;
+ros::Publisher pub_motor_pid_r_set("motor_pid_r_set", &motor_pid_r_set);
+ros::Publisher pub_motor_pid_r_out("motor_pid_r_out", &motor_pid_r_out);
+ros::Publisher pub_motor_pid_r_val("motor_pid_r_val", &motor_pid_r_val);
+
 std_msgs::Float32 ubat_msg;
 ros::Publisher pub_ubat("ubat", &ubat_msg);
 
@@ -122,6 +138,9 @@ ros::Publisher pub_wifirssi("wifi_rssi", &wifirssi_msg);
 
 std_msgs::UInt16MultiArray linesensor_msg;
 ros::Publisher pub_linesensor("linesensor", &linesensor_msg);
+
+std_msgs::UInt8MultiArray proxisensor_msg;
+ros::Publisher pub_proxisensor("proxisensor", &proxisensor_msg);
 
 std_msgs::Int32MultiArray encoder_msg;
 ros::Publisher pub_encoder("encoder", &encoder_msg);
@@ -134,12 +153,25 @@ ros::Publisher pub_lidar("lidar", &lidar_msg);
 sensor_msgs::LaserScan scan_msg;
 ros::Publisher pub_scan("scan", &scan_msg);
 
+sensor_msgs::Range range_msg_l;
+ros::Publisher pub_range_l("range_l", &range_msg_l);
+sensor_msgs::Range range_msg_r;
+ros::Publisher pub_range_r("range_r", &range_msg_r);
+sensor_msgs::Range range_msg_fl;
+ros::Publisher pub_range_fl("range_fl", &range_msg_fl);
+sensor_msgs::Range range_msg_fr;
+ros::Publisher pub_range_fr("range_fr", &range_msg_fr);
+
 //nav_msgs::Odometry odom_msg;
 nav_msgs::Odometry odom_msg;
 ros::Publisher pub_odom("odom_raw",&odom_msg);
 
+void cmd_vel_callback(double linear_x, double linear_y, double angular_z);
 void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd);
 ros::Subscriber<geometry_msgs::Twist> sub_cmdvel("cmd_vel", cmd_vel_callback);
+
+void motor_pid_config_callback(const std_msgs::Float32MultiArray& cfg);
+ros::Subscriber<std_msgs::Float32MultiArray> sub_pidcfg("motor_pid_config", motor_pid_config_callback);
 
 tf::TransformBroadcaster tf_broadcaster;
 
@@ -181,6 +213,7 @@ struct
 	int32_t 	enc_l;
 	int32_t 	enc_r;
 	uint16_t  linesensors[5];
+	uint8_t   proxsensors[6];
 } m32u4_status;
 
 extern "C" {
@@ -277,6 +310,67 @@ void vUpdateDisplay(struct SSD1306_Device* DisplayHandle)
 		}
 #endif
 
+		ESP_LOGI(TAG, "proxsensors ll:%d lr:%d   fl:%d fr:%d   rl:%d rr:%d",
+			m32u4_status.proxsensors[0],
+			m32u4_status.proxsensors[1],
+			m32u4_status.proxsensors[2],
+			m32u4_status.proxsensors[3],
+			m32u4_status.proxsensors[4],
+			m32u4_status.proxsensors[5]);
+
+		{
+			int l;
+			int r = I2CDisplayHeight-48;
+			if( m32u4_status.proxsensors[0] >= 2 || m32u4_status.proxsensors[1] >= 2 )
+			{
+				SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-1,48,I2CDisplayWidth-1,48+r/2,SSD_COLOR_WHITE);
+				if( m32u4_status.proxsensors[0] >= 3 || m32u4_status.proxsensors[1] >= 3 )
+				{
+					SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-2,48,I2CDisplayWidth-2,48+r/2,SSD_COLOR_WHITE);
+					if( m32u4_status.proxsensors[0] >= 4 || m32u4_status.proxsensors[1] >= 4 )
+					{
+						SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-3,48,I2CDisplayWidth-3,48+r/2,SSD_COLOR_WHITE);
+					}
+				}
+			}
+			if( m32u4_status.proxsensors[3] >= 2 )
+			{
+				SSD1306_DrawLine(DisplayHandle,0,I2CDisplayHeight-1,5,I2CDisplayHeight-1,SSD_COLOR_WHITE);
+				if( m32u4_status.proxsensors[3] >= 3 )
+				{
+					SSD1306_DrawLine(DisplayHandle,0,I2CDisplayHeight-2,5,I2CDisplayHeight-2,SSD_COLOR_WHITE);
+					if( m32u4_status.proxsensors[3] >= 4 )
+					{
+						SSD1306_DrawLine(DisplayHandle,0,I2CDisplayHeight-3,5,I2CDisplayHeight-3,SSD_COLOR_WHITE);
+					}
+				}
+			}
+			if( m32u4_status.proxsensors[2] >= 2 )
+			{
+				SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-1-5,I2CDisplayHeight-1,I2CDisplayWidth-1,I2CDisplayHeight-1,SSD_COLOR_WHITE);
+				if( m32u4_status.proxsensors[2] >= 3 )
+				{
+					SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-1-5,I2CDisplayHeight-2,I2CDisplayWidth-1,I2CDisplayHeight-2,SSD_COLOR_WHITE);
+					if( m32u4_status.proxsensors[2] >= 4 )
+					{
+						SSD1306_DrawLine(DisplayHandle,I2CDisplayWidth-1-5,I2CDisplayHeight-3,I2CDisplayWidth-1,I2CDisplayHeight-3,SSD_COLOR_WHITE);
+					}
+				}
+			}
+			if( m32u4_status.proxsensors[4] >= 2 || m32u4_status.proxsensors[5] >= 2 )
+			{
+				SSD1306_DrawLine(DisplayHandle,0,48,0,48+r/2,SSD_COLOR_WHITE);
+				if( m32u4_status.proxsensors[4] >= 3 || m32u4_status.proxsensors[5] >= 3 )
+				{
+					SSD1306_DrawLine(DisplayHandle,1,48,1,48+r/2,SSD_COLOR_WHITE);
+					if( m32u4_status.proxsensors[4] >= 4 || m32u4_status.proxsensors[5] >= 4 )
+					{
+						SSD1306_DrawLine(DisplayHandle,3,48,3,48+r/2,SSD_COLOR_WHITE);
+					}
+				}
+			}
+		}
+
 		SSD1306_Update( DisplayHandle );
 	}
 }
@@ -338,7 +432,7 @@ void vHandleEncoderSteps(int16_t enc_l,int16_t enc_r)
 
 	motor_speed_l = v_left;
 	motor_speed_r = v_right;
-	cmd_vel_motor_update();
+	//cmd_vel_motor_update();
 
 #if 0
 ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%f",
@@ -351,22 +445,7 @@ ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%
 
 	if( nh.connected() )
 	{
-			geometry_msgs::Quaternion odom_quat = tf::createQuaternionFromYaw(th);
-
-	#if 0
-		geometry_msgs::TransformStamped odom_trans;
-		odom_trans.header.stamp = nh.now();
-		odom_trans.header.frame_id = "odom";
-		odom_trans.child_frame_id = "base_footprint";
-
-		odom_trans.transform.translation.x = x;
-		odom_trans.transform.translation.y = y;
-		odom_trans.transform.translation.z = 0.0;
-		odom_trans.transform.rotation = odom_quat;
-
-		//send the transform
-		tf_broadcaster.sendTransform(odom_trans);
-	#endif
+		geometry_msgs::Quaternion odom_quat = tf::createQuaternionFromYaw(th);
 
 		//Odometry message
 		odom_msg.header.stamp = nh.now();
@@ -386,6 +465,24 @@ ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%
 		odom_msg.twist.twist.angular.z = vth;
 
 #if 1
+		double cv_pose = 0.01;
+		double cv_twist = 0.01;
+		odom_msg.pose.covariance[0] = cv_pose;
+		odom_msg.pose.covariance[7] = cv_pose;
+		odom_msg.pose.covariance[8] = cv_pose;
+		odom_msg.pose.covariance[14] = cv_pose;
+		odom_msg.pose.covariance[21] = cv_pose;
+		odom_msg.pose.covariance[28] = cv_pose;
+		odom_msg.pose.covariance[35] = cv_pose;
+		odom_msg.twist.covariance[0] = cv_twist;
+		odom_msg.twist.covariance[7] = cv_twist;
+		odom_msg.twist.covariance[8] = cv_twist;
+		odom_msg.twist.covariance[14] = cv_twist;
+		odom_msg.twist.covariance[21] = cv_twist;
+		odom_msg.twist.covariance[28] = cv_twist;
+		odom_msg.twist.covariance[35] = cv_twist;
+#else
+#if 0
 		odom_msg.pose.covariance[0] = -1;
 		odom_msg.twist.covariance[0] = -1;
 #else
@@ -423,6 +520,7 @@ ESP_LOGI(TAG, "vHandleEncoderSteps(%d,%d) dT=%f v=(%f,%f)|(%f,%f) x=%f y=%f th=%
 			odom_msg.twist.covariance[35] = 1e3;
 		}
 #endif
+#endif
 
 		//publish the message
 		pub_odom.publish(&odom_msg);
@@ -435,7 +533,7 @@ bool nReadM32U4Status()
 	i2c_cmd_handle_t CommandHandle = NULL;
 	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
 	{
-		uint8_t buf[20];
+		uint8_t buf[20+6];
 		int n = sizeof(buf);
 		i2c_master_start( CommandHandle );
 		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_READ, true);
@@ -469,6 +567,10 @@ bool nReadM32U4Status()
 				m32u4_status.linesensors[i] |= (buf[j++]<<8);
 				m32u4_status.linesensors[i] |= (buf[j++]<<0);
 			}
+			for(int i=0;i<6;i++)
+			{
+				m32u4_status.proxsensors[i] = buf[j++];
+			}
 			res = true;
 		}
 		i2c_cmd_link_delete( CommandHandle );
@@ -476,23 +578,30 @@ bool nReadM32U4Status()
 	return res;
 }
 
-MiniPID motor_pid_l(.02,.1,0.5);
-MiniPID motor_pid_r(.02,.1,0.5);
+float motor_pid_cfg[3] = { 0.1, 0.05, 0.001 };
+MiniPID motor_pid_l(motor_pid_cfg[0],motor_pid_cfg[1],motor_pid_cfg[2]);
+MiniPID motor_pid_r(motor_pid_cfg[0],motor_pid_cfg[1],motor_pid_cfg[2]);
+int motor_pid_test = 0;
+
+void motor_pid_config_callback(const std_msgs::Float32MultiArray& cfg)
+{
+	//rostopic pub /motor_pid_config std_msgs/Float32MultiArray '{data: [0, 0.02, 0.1, 0.1]}' -1
+	motor_pid_test = (int)cfg.data[0];
+	motor_pid_l.setPID(cfg.data[1],cfg.data[2],cfg.data[3]);
+	motor_pid_r.setPID(cfg.data[1],cfg.data[2],cfg.data[3]);
+}
 
 void cmd_vel_motor_update()
 {
+	motor_pid_l_out.data = motor_pid_l.getOutput(motor_speed_l);
+	motor_pid_r_out.data = motor_pid_r.getOutput(motor_speed_r);
+
+	int16_t l = motor_pid_l_out.data*1000.0;
+	int16_t r = motor_pid_r_out.data*1000.0;
+
 	i2c_cmd_handle_t CommandHandle = NULL;
 	if ( ( CommandHandle = i2c_cmd_link_create( ) ) != NULL )
 	{
-		int16_t l = motor_pid_l.getOutput(motor_speed_l)*1000.0;
-		int16_t r = motor_pid_r.getOutput(motor_speed_r)*1000.0;
-
-#if 0
-		ESP_LOGI(TAG, "cmd_vel_motor_update L(%f,%f=>%d) R(%f,%f=>%d)",
-		motor_pid_l.getSetpoint(),motor_speed_l,l,
-		motor_pid_r.getSetpoint(),motor_speed_r,r);
-#endif
-
 		i2c_master_start( CommandHandle );
 		i2c_master_write_byte( CommandHandle, ( 8 << 1 ) | I2C_MASTER_WRITE, true);
 		i2c_master_write_byte( CommandHandle, CMD_MOTORS_SET_SPEED, true);
@@ -512,7 +621,7 @@ void cmd_vel_motor_stop()
 {
   motor_pid_l.setSetpoint(0);
   motor_pid_r.setSetpoint(0);
-  cmd_vel_motor_update();
+  //cmd_vel_motor_update();
 }
 
 #ifdef USE_RAWIMU
@@ -584,6 +693,18 @@ void svcCallbackRTIIMUCallibrate(const std_srvs::SetBoolRequest& request, std_sr
 ros::ServiceServer<std_srvs::SetBoolRequest,std_srvs::SetBoolResponse> service_rtiimu_callibrate("/rtiimu_callibrate_srv",&svcCallbackRTIIMUCallibrate);
 #endif
 #endif
+
+void PIDThread(void *pvParameters)
+{
+	ESP_LOGI(TAG, "PIDThread() ...");
+	motor_pid_l.setSetpoint(0);
+	motor_pid_r.setSetpoint(0);
+	while(1)
+	{
+		cmd_vel_motor_update();
+		vTaskDelay(10 / portTICK_PERIOD_MS);
+	}
+}
 
 void I2CThread(void *pvParameters)
 {
@@ -841,6 +962,15 @@ motor_pid_r.setOutputLimits(-255,255);
 			nh.advertise(pub_headingy);
 			nh.advertise(pub_headingz);
 			nh.advertise(pub_wifirssi);
+
+			nh.advertise(pub_motor_pid_l_set);
+			nh.advertise(pub_motor_pid_l_out);
+			nh.advertise(pub_motor_pid_l_val);
+
+			nh.advertise(pub_motor_pid_r_set);
+			nh.advertise(pub_motor_pid_r_out);
+			nh.advertise(pub_motor_pid_r_val);
+
 			linesensor_msg.layout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension)*2);
 		  linesensor_msg.layout.dim[0].label = "height";
 		  linesensor_msg.layout.dim[0].size = 5;
@@ -849,6 +979,16 @@ motor_pid_r.setOutputLimits(-255,255);
 		  linesensor_msg.data = (uint16_t*)malloc(sizeof(uint16_t)*5);
 		  linesensor_msg.data_length = 5;
 			nh.advertise(pub_linesensor);
+
+			proxisensor_msg.layout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension));
+		  proxisensor_msg.layout.dim[0].label = "height";
+		  proxisensor_msg.layout.dim[0].size = 6;
+		  proxisensor_msg.layout.dim[0].stride = 1;
+		  proxisensor_msg.layout.data_offset = 0;
+		  proxisensor_msg.data = (uint8_t*)malloc(sizeof(uint8_t)*6);
+		  proxisensor_msg.data_length = 6;
+			nh.advertise(pub_proxisensor);
+
 			encoder_msg.layout.dim = (std_msgs::MultiArrayDimension *)malloc(sizeof(std_msgs::MultiArrayDimension)*2);
 		  encoder_msg.layout.dim[0].label = "height";
 		  encoder_msg.layout.dim[0].size = 2;
@@ -868,8 +1008,16 @@ motor_pid_r.setOutputLimits(-255,255);
 			nh.advertise(pub_lidar);
 #endif
 			nh.advertise(pub_scan);
+
+			nh.advertise(pub_range_l);
+			nh.advertise(pub_range_r);
+			nh.advertise(pub_range_fl);
+			nh.advertise(pub_range_fr);
+
 			nh.advertise(pub_odom);
 			nh.subscribe(sub_cmdvel);
+			nh.subscribe(sub_pidcfg);
+
 
 #if defined(ENABLE_RTIMULIB) || defined(ENABLE_IMU_BNO055)
 			nh.advertise(pub_imu);
@@ -891,6 +1039,54 @@ motor_pid_r.setOutputLimits(-255,255);
 
 #ifdef USE_RAWIMU
 		vHandle_l3gd20h_and_lsm303d();
+#endif
+
+#if 0
+		if( nh.connected() && published==true )
+		{
+			/*
+			 * Update Params once in a second ...
+			 */
+			int64_t t = esp_timer_get_time();
+			static int64_t _t = 0;
+			if( t > _t )
+			{
+				_t = t + 1000000;
+
+				int test = 0;
+				if( nh.getParam("/rover/rovertest", (int*)&test, 1) )
+				{
+					ESP_LOGI(TAG, "got test param %d",test);
+				}
+				else
+				{
+					ESP_LOGI(TAG, "test param error %d",test);
+				}
+
+				/*
+				 * check for motor PID configuration ...
+				 */
+				float new_pidcfg[4];
+				if( nh.getParam("/motor_pid", new_pidcfg, 4, 100) )
+				{
+					ESP_LOGI(TAG, "got MotorPID params %f,%f,%f,%f",
+						new_pidcfg[0],new_pidcfg[1],new_pidcfg[2],new_pidcfg[3]);
+					if( memcmp(motor_pid_cfg,new_pidcfg,sizeof(new_pidcfg)) != 0 )
+					{
+						motor_pid_cfg[0] = new_pidcfg[0];
+						motor_pid_cfg[1] = new_pidcfg[1];
+						motor_pid_cfg[2] = new_pidcfg[2];
+						motor_pid_cfg[3] = new_pidcfg[3];
+						motor_pid_l.setPID(motor_pid_cfg[0],motor_pid_cfg[1],motor_pid_cfg[2],motor_pid_cfg[3]);
+						motor_pid_r.setPID(motor_pid_cfg[0],motor_pid_cfg[1],motor_pid_cfg[2],motor_pid_cfg[3]);
+					}
+				}
+				else
+				{
+					ESP_LOGI(TAG, "MotorPID error");
+				}
+			}
+		}
 #endif
 
 #ifdef ENABLE_IMU_BNO055
@@ -1108,31 +1304,89 @@ motor_pid_r.setOutputLimits(-255,255);
 		}
 #endif
 
-#if 0
+		if( motor_pid_test == 1 )
 		{
 			int64_t t = esp_timer_get_time();
-			static int64_t _t = 0;
-			static double v = 0;
-			if( t > _t )
+			if( t > 10000000 )
 			{
-				_t = t + 3000000;
-				double _v = 0.05;
-
-				if( v == _v )
+				static int64_t _t = 0;
+				static int state = 0;
+				int secs = 10;
+				double v = (2.0*M_PI) / secs;
+				if( t > _t )
 				{
-					v = -_v;
-					motor_pid_l.setSetpoint(v);
-					motor_pid_r.setSetpoint(v);
-				}
-				else
-				{
-					v = _v;
-					motor_pid_l.setSetpoint(v);
-					motor_pid_r.setSetpoint(v);
+					_t = t + secs * 1000000;
+					if( state == 0 )
+					{
+						state = 1;
+						cmd_vel_callback(0,0.0,v);
+					}
+					else
+					{
+						state = 0;
+						cmd_vel_callback(0,0.0,-v);
+					}
 				}
 			}
 		}
-#endif
+
+		if( motor_pid_test == 2 )
+		{
+			int64_t t = esp_timer_get_time();
+			if( t > 10000000 )
+			{
+				static int64_t _t = 0;
+				static int state = 0;
+				int secs = 10;
+				double v = 1.0 / secs;
+				if( t > _t )
+				{
+					_t = t + secs * 1000000;
+					if( state == 0 )
+					{
+						state = 1;
+						cmd_vel_callback(v,0.0,0);
+					}
+					else
+					{
+						state = 0;
+						cmd_vel_callback(-v,0.0,0);
+					}
+				}
+			}
+		}
+
+		if( motor_pid_test == 3 )
+		{
+			int64_t t = esp_timer_get_time();
+			if( t > 10000000 )
+			{
+				static int64_t _t = 0;
+				static int state = 0;
+				int secs = 3;
+				double v = 1.0 / secs;
+				if( t > _t )
+				{
+					_t = t + secs * 1000000;
+					if( state == 0 )
+					{
+						state = 1;
+						cmd_vel_callback(v,0.0,0);
+					}
+					else
+					{
+						state = 0;
+						cmd_vel_callback(-v,0.0,0);
+					}
+				}
+			}
+		}
+
+		if( motor_pid_test == 4 )
+		{
+			motor_pid_test = 0;
+			cmd_vel_callback(0,0.0,0);
+		}
 
 #if 1
 		if( nReadM32U4Status() == true )
@@ -1156,6 +1410,111 @@ motor_pid_r.setOutputLimits(-255,255);
 					linesensor_msg.data[3] = m32u4_status.linesensors[3];
 					linesensor_msg.data[4] = m32u4_status.linesensors[4];
 					pub_linesensor.publish( &linesensor_msg );
+
+					proxisensor_msg.data[0] = m32u4_status.proxsensors[0];
+					proxisensor_msg.data[1] = m32u4_status.proxsensors[1];
+					proxisensor_msg.data[2] = m32u4_status.proxsensors[2];
+					proxisensor_msg.data[3] = m32u4_status.proxsensors[3];
+					proxisensor_msg.data[4] = m32u4_status.proxsensors[4];
+					proxisensor_msg.data[5] = m32u4_status.proxsensors[5];
+					pub_proxisensor.publish( &proxisensor_msg );
+
+
+							{
+								int j = 0;
+								sensor_msgs::Range *msg;
+								float r_min = 0.25;
+								float r_max = r_min*1;
+								float r_angle = 15.0;
+
+								{
+									int j = 0;
+									msg = &range_msg_l;
+
+									msg->header.seq++;
+									msg->header.stamp = nh.now();
+									msg->header.frame_id = "ranger_l_link";
+									msg->radiation_type = 1;
+									msg->field_of_view = (2*M_PI)*r_angle/260.0;
+									msg->min_range = r_min;
+									msg->max_range = r_max;
+									if( proxisensor_msg.data[j]>=6 || proxisensor_msg.data[j+1]>=6 )
+									{
+										msg->range = r_min*1;
+									}
+									else
+									{
+										msg->range = INFINITY;
+									}
+									pub_range_l.publish( msg );
+								}
+
+								{
+									int j = 2;
+									msg = &range_msg_fl;
+
+									msg->header.seq++;
+									msg->header.stamp = nh.now();
+									msg->header.frame_id = "ranger_fl_link";
+									msg->radiation_type = 1;
+									msg->field_of_view = (2*M_PI)*r_angle/260.0;
+									msg->min_range = r_min;
+									msg->max_range = r_max;
+									if( proxisensor_msg.data[j]>=6 )
+									{
+										msg->range = r_min*1;
+									}
+									else
+									{
+										msg->range = INFINITY;
+									}
+									pub_range_fl.publish( msg );
+								}
+
+								{
+									int j = 3;
+									msg = &range_msg_fr;
+
+									msg->header.seq++;
+									msg->header.stamp = nh.now();
+									msg->header.frame_id = "ranger_fr_link";
+									msg->radiation_type = 1;
+									msg->field_of_view = (2*M_PI)*r_angle/260.0;
+									msg->min_range = r_min;
+									msg->max_range = r_max;
+									if( proxisensor_msg.data[j]>=6 )
+									{
+										msg->range = r_min*1;
+									}
+									else
+									{
+										msg->range = INFINITY;
+									}
+									pub_range_fr.publish( msg );
+								}
+
+						{
+							int j = 4;
+							msg = &range_msg_r;
+
+							msg->header.seq++;
+							msg->header.stamp = nh.now();
+							msg->header.frame_id = "ranger_r_link";
+							msg->radiation_type = 1;
+							msg->field_of_view = (2*M_PI)*r_angle/260.0;
+							msg->min_range = r_min;
+							msg->max_range = r_max;
+							if( proxisensor_msg.data[j]>=6 || proxisensor_msg.data[j+1]>=6 )
+							{
+								msg->range = r_min*1;
+							}
+							else
+							{
+								msg->range = INFINITY;
+							}
+							pub_range_r.publish( msg );
+						}
+					}
 
 					encoder_msg.data[0] = m32u4_status.enc_l;
 					encoder_msg.data[1] = m32u4_status.enc_r;
@@ -1201,10 +1560,10 @@ motor_pid_r.setOutputLimits(-255,255);
 							scan_msg.angle_increment = ((scan_msg.angle_max-scan_msg.angle_min) / (scan.n-1));
 							for( int i=0;i<scan.n; i++ )
 							{
-								if( scan.ranges[i] == 0xffff )
+								if( scan.ranges[i]==0xffff )
 								{
 									scan_msg.intensities[i] = 0.0;
-									scan_msg.ranges[i] = 5.0;
+									scan_msg.ranges[i] = -1;
 								}
 								else
 								{
@@ -1218,15 +1577,15 @@ motor_pid_r.setOutputLimits(-255,255);
 						{
 							scan_msg.header.stamp = time;
 							scan_msg.header.seq = scan_msg.header.seq + 1;
-							scan_msg.angle_min = (2.0*3.14 * lidar_angle_max/360.0);
-							scan_msg.angle_max = (2.0*3.14 * lidar_angle_min/360.0);
+							scan_msg.angle_min = (2.0*M_PI * lidar_angle_max/360.0);
+							scan_msg.angle_max = (2.0*M_PI * lidar_angle_min/360.0);
 							scan_msg.angle_increment = ((scan_msg.angle_max-scan_msg.angle_min) / (scan.n-1));
 							for( int i=0;i<scan.n; i++ )
 							{
 								if( scan.ranges[scan.n-1-i] == 0xffff )
 								{
-									scan_msg.intensities[i] = 0.0;
-									scan_msg.ranges[i] = 0.0;
+									scan_msg.intensities[i] = -1;
+									scan_msg.ranges[i] = 99.0;
 								}
 								else
 								{
@@ -1266,6 +1625,21 @@ motor_pid_r.setOutputLimits(-255,255);
 			}
 		}
 
+		if( nh.connected() && published==true )
+		{
+			motor_pid_l_set.data = motor_pid_l.getSetpoint();
+			pub_motor_pid_l_set.publish( &motor_pid_l_set );
+			pub_motor_pid_l_out.publish( &motor_pid_l_out );
+			motor_pid_l_val.data = motor_speed_l;
+			pub_motor_pid_l_val.publish( &motor_pid_l_val );
+
+			motor_pid_r_set.data = motor_pid_r.getSetpoint();
+			pub_motor_pid_r_set.publish( &motor_pid_r_set );
+			pub_motor_pid_r_out.publish( &motor_pid_r_out );
+			motor_pid_r_val.data = motor_speed_r;
+			pub_motor_pid_r_val.publish( &motor_pid_r_val );
+		}
+
 #ifdef ENABLE_DISPLAY
 		vUpdateDisplay(&I2CDisplay);
 #endif
@@ -1277,22 +1651,21 @@ motor_pid_r.setOutputLimits(-255,255);
 /*
  * called by other ROS nodes
  */
-void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
+void cmd_vel_callback(double linear_x, double linear_y, double angular_z)
 {
-#if 1
 	double wheel0_speed = 0;
 	double wheel1_speed = 0;
 
-	double wheelbase_ = 0.09;
+	double wheelbase_ = 0.112;
 
 	// *** Compute the current wheel speeds ***
 	// First compute the Robot's linear and angular speeds
-	double xspeed = vel_cmd.linear.x;
-	double yspeed = vel_cmd.linear.y;
+	double xspeed = linear_x;
+	double yspeed = linear_y;
 	double linear_speed = sqrt (xspeed * xspeed + yspeed * yspeed);
-	double angular_speed = vel_cmd.angular.z;
+	double angular_speed = angular_z;
 
-	if( vel_cmd.linear.x >= 0 )
+	if( linear_x >= 0 )
 	{
 		// robot is moving forward
 		wheel0_speed = linear_speed + angular_speed * wheelbase_ / 2.0;
@@ -1308,31 +1681,19 @@ void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
 	motor_pid_l.setSetpoint(wheel1_speed);
 	motor_pid_r.setSetpoint(wheel0_speed);
 
-#else
-	double x = (double)1.0*vel_cmd.linear.x;
-	double y = (double)1.0*vel_cmd.angular.z;
-
-	double vmax = 0.1;
-
-	//x = (x>vmax)?vmax:((x<-vmax)?-vmax:x);
-	//y = (y>vmax)?vmax:((y<-vmax)?-vmax:y);
-
-	if((fabs(x)+fabs(y))>1.0)
-	{
-		double k = (fabs(x)+fabs(y));
-		x = x/k;
-		y = y/k;
-	}
-
-	motor_pid_r.setSetpoint((double)(x)+(y));
-	motor_pid_l.setSetpoint((double)(x)-(y));
-#endif
-
 	ESP_LOGI(TAG, "cmd_vel_callback Twist(x:%f,y:%f,z:%f) M(%f,%f)",
-	  vel_cmd.linear.x,vel_cmd.linear.y,vel_cmd.angular.z,
+	  linear_x,linear_y,angular_z,
 		motor_pid_l.getSetpoint(),motor_pid_r.getSetpoint());
 
-	cmd_vel_motor_update();
+	//cmd_vel_motor_update();
+}
+
+/*
+ * called by other ROS nodes
+ */
+void cmd_vel_callback(const geometry_msgs::Twist& vel_cmd)
+{
+	cmd_vel_callback(vel_cmd.linear.x,vel_cmd.linear.y,vel_cmd.angular.z);
 }
 
 int my_nulllog(const char *format, va_list args);
@@ -1599,7 +1960,8 @@ void app_main(void)
 	xTaskCreate(&ota_server_task, "ota_server_task", 4096, NULL, 5, NULL);
 #endif
 #ifdef ENABLE_I2C
-	xTaskCreate(&I2CThread, "i2c_task", configMINIMAL_STACK_SIZE + 2048 + 2*2048, NULL, 5, NULL);
+	xTaskCreate(&I2CThread, "i2c_task", configMINIMAL_STACK_SIZE + 2048 + 2*2048, NULL, 6, NULL);
+	xTaskCreate(&PIDThread, "pid_task", configMINIMAL_STACK_SIZE + 1024, NULL, 7, NULL);
 #endif
 
 	ESP_LOGI(TAG, "main() ... done");

@@ -12,8 +12,8 @@
 
 //#define NUM_LIDAR_SCANS   35
 //#define CFG_LIDAR_OFFSET  -3
-#define NUM_LIDAR_SCANS   29
-#define CFG_LIDAR_OFFSET  0
+#define NUM_LIDAR_SCANS   35
+#define CFG_LIDAR_OFFSET  2
 
 typedef struct
 {

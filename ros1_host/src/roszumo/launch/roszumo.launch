@@ -1,4 +1,5 @@
 <launch>
+
   <arg name="port" default="11411" />
   <arg name="addr" default="192.168.1.72" />
 
@@ -6,16 +7,23 @@
     <param name="port" value="$(arg port)" />
   </node-->
 
-  <node pkg="rosserial_server" type="udp_socket_node" name="rosserial_server">
+  <rosparam param="/rover/rovertest">22</rosparam>
+  <node pkg="rosserial_server" type="udp_socket_node" name="rover" output="screen">
     <param name="client_port" value="$(arg port)" />
     <param name="client_addr" value="$(arg addr)" />
   </node>
 
-  <rosparam param="/BNO055Callibration">[0,0,0,-228,-1327,516,2,-3,-1,1000,992]</rosparam>
+  <rosparam param="BNO055Callibration">[0,0,0,-228,-1327,516,2,-3,-1,1000,992]</rosparam>
+  <rosparam param="/motor_pid">[0.02,0.1,0.1,0.0]</rosparam>
+
 
   <node pkg="tf" type="static_transform_publisher" name="tf_02" args="0 0 0.04 0 0 0 base_footprint base_link 100"/>
   <node pkg="tf" type="static_transform_publisher" name="tf_03" args="0.03 0.02 0.035 0 0 0 base_link imu_link 100"/>
   <node pkg="tf" type="static_transform_publisher" name="tf_05" args="0.00 0.00 0.11 0 0 0 base_link laser_link 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="tf_06_r"  args="0.0 -0.05 0.0  -1.57 0 0  base_link ranger_r_link 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="tf_06_l"  args="0.0  0.05 0.0   1.57 0 0   base_link ranger_l_link 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="tf_06_fr" args="0.05.0 -0.025 0.0  0 0 0  base_link ranger_fr_link 100"/>
+  <node pkg="tf" type="static_transform_publisher" name="tf_06_fl" args="0.05.0  0.025 0.0  0 0 0  base_link ranger_fl_link 100"/>
 
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" />
 
@@ -42,7 +50,7 @@
   <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
        <param name="base_frame" value="$(arg base_frame)"/>
        <param name="odom_frame" value="$(arg odom_frame)"/>
-       <param name="map_update_interval" value="1.0"/>
+       <param name="map_update_interval" value="0.3"/>
        <param name="maxUrange" value="2.0"/>
        <param name="minRange" value="0.1"/>
        <param name="sigma" value="0.05"/>
@@ -72,12 +80,12 @@
        <param name="llsamplestep" value="0.05"/>
        <param name="lasamplerange" value="0.005"/>
        <param name="lasamplestep" value="0.005"/>
-       <param name="transform_publish_period" value="0.01"/>
+       <param name="transform_publish_period" value="0.1"/>
        <remap from="scan" to="$(arg scan_topic)"/>
   </node>
 
-<node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
-  <param name="controller_frequency" value="50"/>
+<!--node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+  <param name="controller_frequency" value="2"/>
   <param name="clearing_rotation_allowed" value="false"/>
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
   <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
@@ -85,6 +93,6 @@
   <rosparam file="$(find roszumo)/config/global_costmap_params.yaml" command="load" />
   <rosparam file="$(find roszumo)/config/base_local_planner_params.yaml" command="load" />
   <remap from="/odom" to="/odometry/filtered"/>
-</node>
+</node-->
 
 </launch>

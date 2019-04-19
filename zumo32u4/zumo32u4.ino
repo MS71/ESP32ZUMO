@@ -9,13 +9,16 @@
 #define CMD_LIDAR_SET_PWM       0x05
 #define CMD_GET_STATUS          0x06
 
-Zumo32U4Buzzer buzzer;
-Zumo32U4Motors motors;
-Zumo32U4Encoders encoders;
-Zumo32U4LineSensors lineSensors;
+Zumo32U4Buzzer            buzzer;
+Zumo32U4Motors            motors;
+Zumo32U4Encoders          encoders;
+Zumo32U4LineSensors       lineSensors;
+Zumo32U4ProximitySensors  proxSensors;
 #define NUM_SENSORS 5
 uint16_t lineSensorValues[NUM_SENSORS];
 bool useEmitters = true;
+
+uint8_t proxSensorsValues[6] = {0};
 
 volatile uint32_t loopcnt = 0;
 
@@ -72,6 +75,9 @@ void setup()
   setPwmDutyA(0);
 #endif
 
+  lineSensors.initThreeSensors();
+  proxSensors.pullupsOn();
+  proxSensors.initThreeSensors();
   buzzer.playFrequency(1000, 50, 10);
 }
 
@@ -82,6 +88,14 @@ void loop()
   uint16_t tmp_bat = readBatteryMillivolts();
 
   lineSensors.read(lineSensorValues, useEmitters ? QTR_EMITTERS_ON : QTR_EMITTERS_OFF);
+  proxSensors.read();
+
+  proxSensorsValues[0] = proxSensors.countsLeftWithLeftLeds();
+  proxSensorsValues[1] = proxSensors.countsLeftWithRightLeds();
+  proxSensorsValues[2] = proxSensors.countsFrontWithLeftLeds();
+  proxSensorsValues[3] = proxSensors.countsFrontWithRightLeds();
+  proxSensorsValues[4] = proxSensors.countsRightWithLeftLeds();
+  proxSensorsValues[5] = proxSensors.countsRightWithRightLeds();
 
   cli();
   loopcnt++;
@@ -164,7 +178,7 @@ void requestEvent()
 {
   ledGreen(1);
   uint8_t idx = 0;
-  uint8_t buf[4 + 2 + 4 + 2*NUM_SENSORS ];
+  uint8_t buf[4 + 2 + 4 + 2*NUM_SENSORS + 6 ];
 
   buf[idx++] = (uint8_t)(loopcnt >> 24) & 0xff;
   buf[idx++] = (uint8_t)(loopcnt >> 16) & 0xff;
@@ -190,6 +204,17 @@ void requestEvent()
       buf[idx++] = (uint8_t)(lineSensorValues[i] >> 0) & 0xff;
     }
   }
+
+  {
+    int i = 0;
+    buf[idx++] = proxSensorsValues[i++];
+    buf[idx++] = proxSensorsValues[i++];
+    buf[idx++] = proxSensorsValues[i++];
+    buf[idx++] = proxSensorsValues[i++];
+    buf[idx++] = proxSensorsValues[i++];
+    buf[idx++] = proxSensorsValues[i++];
+  }
+
   Wire.write(buf, sizeof(buf));
   ledGreen(0);
 }
