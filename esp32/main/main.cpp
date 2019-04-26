@@ -1551,6 +1551,8 @@ motor_pid_r.setOutputLimits(-255,255);
 						scan_msg.intensities_length = scan.n;
 						scan_msg.header.frame_id = "laser_link";
 						scan_msg.scan_time = (0.000001*(scan.t_last-scan.t_first));
+						scan_msg.range_min = 0.0;
+						scan_msg.range_max = 2.0;
 						if( scan.dir == -1 )
 						{
 							scan_msg.header.stamp = time;
@@ -1572,6 +1574,8 @@ motor_pid_r.setOutputLimits(-255,255);
 								}
 							}
 							scan_msg.time_increment = (0.000001*(scan.t_last-scan.t_first)) / (scan.n-1);
+
+							pub_scan.publish(&scan_msg);
 						}
 						else
 						{
@@ -1594,12 +1598,9 @@ motor_pid_r.setOutputLimits(-255,255);
 								}
 							}
 							scan_msg.time_increment = (0.000001*(scan.t_last-scan.t_first)) / (scan.n-1);
+
+							pub_scan.publish(&scan_msg);
 						}
-
-						scan_msg.range_min = 0.0;
-						scan_msg.range_max = 2.0;
-						pub_scan.publish(&scan_msg);
-
 					}
 				}
 			}
