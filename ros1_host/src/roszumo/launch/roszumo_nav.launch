@@ -1,7 +1,7 @@
 <launch>
   <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
-    <param name="controller_frequency" value="0.1"/>
-    <param name="planner_frequency" value="1"/>
+    <param name="controller_frequency" value="2"/>
+    <param name="planner_frequency" value="2"/>
     <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find roszumo)/config/costmap_common_params.yaml" command="load" ns="local_costmap" />
     <rosparam file="$(find roszumo)/config/local_costmap_params.yaml" command="load" />
