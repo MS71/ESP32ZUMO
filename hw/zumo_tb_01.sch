@@ -33867,6 +33867,7 @@ Source: 008-0260-0_E.pdf</description>
 <part name="GND40" library="supply1" library_urn="urn:adsk.eagle:library:371" deviceset="GND" device=""/>
 <part name="R11" library="rcl" library_urn="urn:adsk.eagle:library:334" deviceset="R-EU_" device="R0603" package3d_urn="urn:adsk.eagle:package:23555/3"/>
 <part name="SJ23" library="jumper" library_urn="urn:adsk.eagle:library:252" deviceset="SJ" device="" package3d_urn="urn:adsk.eagle:package:15471/1"/>
+<part name="SJ26" library="jumper" library_urn="urn:adsk.eagle:library:252" deviceset="SJ" device="" package3d_urn="urn:adsk.eagle:package:15471/1"/>
 </parts>
 <sheets>
 <sheet>
@@ -34354,6 +34355,10 @@ Source: 008-0260-0_E.pdf</description>
 <attribute name="NAME" x="107.7214" y="214.63" size="1.778" layer="95" rot="R90"/>
 <attribute name="VALUE" x="112.522" y="214.63" size="1.778" layer="96" rot="R90"/>
 </instance>
+<instance part="SJ26" gate="1" x="78.74" y="233.68" smashed="yes" rot="R270">
+<attribute name="NAME" x="81.28" y="236.22" size="1.778" layer="95" rot="R270"/>
+<attribute name="VALUE" x="74.93" y="236.22" size="1.778" layer="96" rot="R270"/>
+</instance>
 </instances>
 <busses>
 </busses>
@@ -34391,6 +34396,11 @@ Source: 008-0260-0_E.pdf</description>
 <pinref part="LEDSTR" gate="G$1" pin="1"/>
 <wire x1="157.48" y1="20.32" x2="154.94" y2="20.32" width="0.1524" layer="91"/>
 <label x="154.94" y="20.32" size="1.016" layer="95" rot="R180" xref="yes"/>
+</segment>
+<segment>
+<pinref part="SJ26" gate="1" pin="1"/>
+<wire x1="78.74" y1="238.76" x2="78.74" y2="241.3" width="0.1524" layer="91"/>
+<label x="78.74" y="241.3" size="1.016" layer="95" rot="R90" xref="yes"/>
 </segment>
 </net>
 <net name="U3.3" class="2">
@@ -34983,6 +34993,11 @@ Source: 008-0260-0_E.pdf</description>
 <wire x1="60.96" y1="251.46" x2="60.96" y2="248.92" width="0.1524" layer="91"/>
 <label x="60.96" y="251.46" size="1.27" layer="95" rot="R90" xref="yes"/>
 <pinref part="SV7" gate="G$1" pin="4"/>
+</segment>
+<segment>
+<pinref part="SJ26" gate="1" pin="2"/>
+<wire x1="78.74" y1="228.6" x2="78.74" y2="226.06" width="0.1524" layer="91"/>
+<label x="78.74" y="226.06" size="1.016" layer="95" rot="R270" xref="yes"/>
 </segment>
 </net>
 <net name="ADC0" class="0">
